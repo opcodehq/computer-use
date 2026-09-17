@@ -1,1 +1,17 @@
 .context
+.repos/
+node_modules/
+dist/
+native/macos/build/
+release/
+coverage/
+.cache/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+.DS_Store
+
+__pycache__/
+*.py[cod]
