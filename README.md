@@ -1,8 +1,8 @@
 # Jev Desktop
 
-A Mac computer-use CLI and MCP server for Claude Code, Codex, and other coding agents. The coding agent plans; Jev selects one action from live Accessibility controls; our Swift driver executes it. Effect manages the driver process and request lifecycle. Bun is the package manager and CLI runtime.
+A Mac computer-use CLI and MCP server for Claude Code, Codex, and other coding agents. The coding agent plans; Jev selects actions from live Accessibility controls and optional local YOLO/OCR regions; our Swift driver executes it. Effect manages the driver process and request lifecycle. Bun is the package manager and CLI runtime.
 
-**Only a TypeSafe API key is needed for semantic actions.** No extra Claude/OpenAI API key or model ID. Read-only tools need no model credentials. Accessibility is required for controls; Screen Recording is not needed for this core path. No screenshots are sent to Jev.
+**Only a TypeSafe API key is needed for Jev tasks.** No extra Claude/OpenAI API key or model ID. Read-only tools need no model credentials. Accessibility is required for controls; Screen Recording is not needed for this core path. No screenshots are sent to Jev.
 
 ## Run on your Mac
 
@@ -27,7 +27,7 @@ bun start act --app TextEdit --operation setValue --instruction "Replace the doc
 bun start act --app Calculator --instruction "Press Clear" --dry-run
 ```
 
-Each invocation returns JSON and performs at most one action. The caller supplies exact text; Jev selects, it does not generate document content. `act` returns `dispatchedUnverified` plus fresh state: inspect that state before deciding the next step. No-match and uncertain selections return without dispatch. The initial 0.6 confidence threshold is provisional, not an accuracy or permission guarantee.
+`act` returns JSON and performs at most one action; `task` runs multiple steps without a fixed cap. The caller supplies exact text; Jev selects, it does not generate document content. `act` returns `dispatchedUnverified` plus fresh state: inspect that state before deciding the next step. No-match and uncertain selections return without dispatch. The initial 0.6 confidence threshold is provisional, not an accuracy or permission guarantee.
 
 ## Use inside your current Codex or Claude session
 
@@ -115,12 +115,12 @@ The cloud VM cannot control your Mac through local stdio: the MCP host must run 
 Mac Accessibility controls: press, replace value, and insert exact text where advertised.
 MCP also lists windows, pins observations to a window, background-clicks exact
 controls, and types/sends named keys into a proven focused editable receiver.
-`desktop_wait` verifies expected output from fresh observations. Secure fields,
-unsupported canvas input, general scrolling, and Linux native automation remain
-unsupported. Missing controls return no-match; the coding agent can inspect and
+`desktop_wait` verifies expected output from fresh observations. Secure fields, general scrolling, and Linux native automation remain
+unsupported. Local YOLO/OCR can ground visible controls missing from AX; background
+pointer compatibility still varies by app. Missing controls return no-match; the coding agent can inspect and
 choose an exact observed action instead of ending the whole task.
 
-The Electron app (`bun run desktop`) defaults to Jev task mode: exact named-app launch requests use an installed-app catalog; other tasks run semantic presses without a fixed step cap with fresh observations and Jev completion judgments. TypeSafe is the only model credential for this mode. It can fill observed writable fields using exact text you provide or phrases copied from your task, then inspect recipient/search suggestions. It stops on uncertainty or unsupported steps; generated prose, keyboard-only steps, and general cross-app tasks are not implemented. The older desktop/browser planner modes still require Claude. CLI/MCP `act` remains one bounded action for the host coding agent to compose.
+The Electron app (`bun run desktop`) defaults to Jev task mode: exact named-app launch requests use an installed-app catalog; other tasks run semantic presses without a fixed step cap with fresh observations and Jev completion judgments. TypeSafe is the only model credential for this mode. It can fill observed writable fields using exact text you provide or phrases copied from your task, then inspect recipient/search suggestions. It stops on uncertainty or unsupported steps; generated prose and general cross-app planning remain the host coding agent’s job. Supported focused-control keyboard navigation is available. The older desktop/browser planner modes still require Claude. CLI/MCP `act` remains one bounded action for the host coding agent to compose.
 
 ## Development
 
@@ -203,3 +203,22 @@ attribute-read errors mark the tree partial. Off-screen background pointer reque
 return `WindowOffScreen` without input or a Space switch. Accessory apps are now
 included in discovery. Electron pointer transport remains experimental; semantic
 AXPress is the preferred supported route.
+
+
+## Hybrid vision and the computer workspace
+
+See [VISION.md](VISION.md) for the pinned YOLO/CoreML export, licensing, local OCR,
+fresh visual references, and screenshot access for the existing host harness.
+The Electron panel now includes a dedicated computer preview, floating preview,
+optional detection boxes, animated action cursor, and a semantic-layout fallback.
+The virtual pointer never moves the hardware mouse. Stop/completion clears it.
+
+Enable **Local vision** for Jev tasks after granting optional capture. Without a
+CoreML detector, OCR works alone with an explicit status message. Detected labels
+and controls go to Jev; pixels stay local. `capture` lets the host coding agent
+inspect a screenshot when an unlabeled icon needs actual visual understanding.
+
+The preview shows the selected Mac window; it is not a separate OS login/VM.
+Background delivery still yields to your activity in the target app. Native vision
+compilation and live capture validation are pending Mac connectivity; see
+[VALIDATION.md](VALIDATION.md) for what has actually passed.

@@ -1,3 +1,5 @@
+import { addVisualObservation } from '../vision/observation.js';
+import { SnapshotSchema } from '../shared/contracts.js';
 import { SettingsStore } from './settings.js';
 import { runDesktopGoal, taskDecider } from '../tool/task.js';
 import { app, BrowserWindow, ipcMain } from 'electron';
@@ -14,6 +16,11 @@ import { TaskRunner, runnerLayer } from './runner.js';
 const root = dirname(fileURLToPath(import.meta.url));
 const binary = join(root, '../native/macos/build/desktop-driver');
 let window: BrowserWindow | undefined;
+let previewWindow: BrowserWindow | undefined;
+let lastObservation: Event | undefined;
+let lastImage: Event | undefined;
+let lastEvent: Event | undefined;
+let previewBusy = false;
 let config: Config = { typesafeKey: process.env.TYPESAFE_API_KEY ?? '', anthropicKey: process.env.ANTHROPIC_API_KEY ?? '', model: process.env.ANTHROPIC_MODEL ?? '' };
 let running: Fiber.Fiber<void, DriverError> | undefined;
 let stopping = false;
@@ -22,6 +29,10 @@ let singlePending: Promise<void> | undefined;
 let trace = '';
 let traceChain = Promise.resolve();
 const emit = (event: Event) => {
+  lastEvent = event;
+  if (event.snapshot) lastObservation = event;
+  if (event.image) lastImage = event;
+  if (previewWindow && !previewWindow.isDestroyed()) previewWindow.webContents.send('task:event', event);
   if (window && !window.isDestroyed()) window.webContents.send('task:event', event);
   // Metadata only: no goals, input text, screenshots, or raw page content on disk.
   if (trace) traceChain = traceChain.then(() => appendFile(trace, JSON.stringify({ at: new Date().toISOString(), state: event.state }) + '\n')).catch(() => {});
@@ -34,7 +45,8 @@ const runtime = ManagedRuntime.make(runnerLayer(emit).pipe(Layer.provideMerge(se
 
 
 function trusted(event: Electron.IpcMainInvokeEvent) {
-  if (event.sender !== window?.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted IPC sender.');
+  const allowed = [window, previewWindow].some(candidate => candidate && !candidate.isDestroyed() && candidate.webContents === event.sender);
+  if (!allowed || event.sender.isDestroyed() || event.senderFrame !== event.sender.mainFrame) throw new Error('Untrusted IPC sender.');
 }
 
 void app.whenReady().then(async () => {
@@ -61,6 +73,29 @@ ipcMain.handle('status', async event => {
   catch { return { accessibility: false, screenRecording: false, platform: process.platform, error: 'Native driver unavailable. Build it on your Mac with bun run build:native.' }; }
 });
 ipcMain.handle('apps', async event => { trusted(event); return runtime.runPromise(DesktopDriver.use(d => d.request('apps'))); });
+ipcMain.handle('popout', async event => {
+  trusted(event);
+  if (previewWindow && !previewWindow.isDestroyed()) { previewWindow.show(); return; }
+  previewWindow = new BrowserWindow({ width: 640, height: 490, minWidth: 400, minHeight: 280, title: 'Jev · Computer', alwaysOnTop: true, backgroundColor: '#101318', webPreferences: { preload: join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  previewWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  previewWindow.webContents.on('will-navigate', e => e.preventDefault());
+  await previewWindow.loadFile(join(root, 'renderer/index.html'), { query: { preview: '1' } });
+  if (lastImage) previewWindow.webContents.send('task:event', lastImage);
+  if (lastObservation && lastObservation !== lastImage) previewWindow.webContents.send('task:event', lastObservation);
+  if (lastEvent && lastEvent !== lastObservation && lastEvent !== lastImage) previewWindow.webContents.send('task:event', lastEvent);
+});
+ipcMain.handle('preview', async (event, value: unknown) => {
+  trusted(event);
+  if (running || singleAction || stopping || previewBusy) throw new Error('Preview is already updating or a task is running.');
+  const input = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number, modelPath: Schema.optional(Schema.String), overlay: Schema.Boolean }))(value);
+  const request = (method: string, args?: Record<string, unknown>) => runtime.runPromise(DesktopDriver.use(d => d.request(method, args)));
+  previewBusy = true;
+  try {
+    const snapshot = Schema.decodeUnknownSync(SnapshotSchema)(await request('snapshot', { pid: input.pid }));
+    const result = await addVisualObservation(snapshot, request, { visual: true, overlay: input.overlay, modelPath: input.modelPath });
+    emit({ state: 'preview', message: result.snapshot.visual?.warning ?? 'Local window preview. Pixels stay on this Mac.', ...result });
+  } finally { previewBusy = false; }
+});
 ipcMain.handle('permission', async (event, kind: unknown) => {
   trusted(event);
   const permission = Schema.decodeUnknownSync(Schema.Literals(['accessibility', 'screenRecording']))(kind);
@@ -81,17 +116,18 @@ ipcMain.handle('configure', async (event, value: unknown) => {
 });
 ipcMain.handle('start', async (event, value: unknown) => {
   trusted(event);
-  if (running || singleAction || stopping) throw new Error('A task is already running or stopping.');
+  if (running || singleAction || stopping || previewBusy) throw new Error('A task is already running or stopping.');
+  lastImage = undefined; lastObservation = undefined;
   const input = Schema.decodeUnknownSync(StartSchema)(value);
   if (!input.goal.trim() || input.goal.length > 8000) throw new Error('Enter a task of up to 8,000 characters.');
   if (input.mode === 'jev') {
     if (!config.typesafeKey) throw new Error('Add only your TypeSafe API key in Connection & permissions.');
     const controller = new AbortController();
     singleAction = controller;
-    emit({ state: 'selecting', message: 'Jev is checking the task and available actions.' });
+    emit({ state: 'starting', message: 'Jev is checking the task and available actions.' });
     singlePending = (async () => {
       try {
-        await runDesktopGoal(input.goal, String(input.pid), (method, args, signal) => runtime.runPromise(DesktopDriver.use(d => d.request(method, args)), { signal }), taskDecider(() => config.typesafeKey), emit, controller.signal, input.text);
+        await runDesktopGoal(input.goal, String(input.pid), (method, args, signal) => runtime.runPromise(DesktopDriver.use(d => d.request(method, args)), { signal }), taskDecider(() => config.typesafeKey), emit, controller.signal, input.text, { visual: input.localVisual, overlay: input.overlay, modelPath: input.modelPath });
       } catch (error) {
         if (!controller.signal.aborted) emit({ state: 'failed', message: error instanceof Error ? error.message : 'Jev action failed.' });
       } finally { singleAction = undefined; }
@@ -99,6 +135,7 @@ ipcMain.handle('start', async (event, value: unknown) => {
     return;
   }
   if (!config.typesafeKey || !config.anthropicKey || !config.model) throw new Error('Add TypeSafe and Claude credentials and a Claude model ID in Settings.');
+  emit({ state: 'starting', message: 'Starting a new computer session.' });
   const taskRunner = await runtime.runPromise(TaskRunner);
   const program = taskRunner.run(input).pipe(
     Effect.catch(error => Effect.sync(() => emit({ state: 'failed', message: error.message }))),
@@ -119,7 +156,7 @@ ipcMain.handle('stop', async event => {
   } finally { stopping = false; }
 });
 
-window = new BrowserWindow({ width: 1100, height: 800, minWidth: 780, minHeight: 600, backgroundColor: '#f4f2ed', title: 'Jev Desktop', webPreferences: { preload: join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+window = new BrowserWindow({ width: 1380, height: 900, minWidth: 900, minHeight: 650, backgroundColor: '#101318', title: 'Jev Desktop', webPreferences: { preload: join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', event => event.preventDefault());
 window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));

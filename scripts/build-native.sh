@@ -7,6 +7,6 @@ if [[ "$(uname -s)" != Darwin ]]; then
 fi
 mkdir -p native/macos/build
 xcrun swiftc -swift-version 5 -parse-as-library -O \
-  -framework AppKit -framework ApplicationServices -framework ScreenCaptureKit \
-  native/macos/Driver.swift native/macos/BackgroundInput.swift -o native/macos/build/desktop-driver
+  -framework AppKit -framework ApplicationServices -framework ScreenCaptureKit -framework Vision -framework CoreML -framework CryptoKit \
+  native/macos/Driver.swift native/macos/BackgroundInput.swift native/macos/VisualDetector.swift -o native/macos/build/desktop-driver
 echo 'Built native/macos/build/desktop-driver'

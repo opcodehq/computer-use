@@ -17,6 +17,10 @@ struct SavedElement {
 
 @MainActor final class Driver {
     let backgroundInput = BackgroundInput()
+    let visualDetector = VisualDetector()
+    var visualRegions: [String: (region: VisualRegion, digest: String)] = [:]
+    var visualCapturedAt: Date?
+    var lastCaptureImage: CGImage?
     var virtualCursor: CGPoint?
     let foregroundAllowed = ProcessInfo.processInfo.environment["JEV_INTERACTION_MODE"] == "foreground"
     var activatedRenderers = Set<String>()
@@ -69,7 +73,7 @@ struct SavedElement {
         guard let app = NSRunningApplication(processIdentifier: pid), !app.isTerminated else {
             throw DriverFailure(code: "AppClosed", message: "The selected application is no longer running.")
         }
-        refs.removeAll(); captureFrame = nil; captureGeneration = ""
+        refs.removeAll(); visualRegions.removeAll(); visualCapturedAt = nil; lastCaptureImage = nil; captureFrame = nil; captureGeneration = ""
         generation = UUID().uuidString; targetPID = pid; targetLaunch = app.launchDate
         let application = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(application, 1.5)
@@ -153,7 +157,7 @@ struct SavedElement {
                           "focused": (value(element, "AXFocused") as? Bool) ?? false,
                           "enabled": (value(element, "AXEnabled") as? Bool) ?? true,
                           "actions": secure ? [] : supported, "depth": depth]
-            if !supported.isEmpty, let frame = windowFrame(element) {
+            if let frame = windowFrame(element) {
                 node["frame"] = ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]
             }
             nodes.append(node)
@@ -446,24 +450,111 @@ struct SavedElement {
             throw DriverFailure(code: "ScreenRecordingDenied", message: "Visual fallback is optional. Enable Screen Recording to use it.")
         }
         if #available(macOS 14.0, *) {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
             guard let axWindow = targetWindow, let frame = windowFrame(axWindow) else { throw DriverFailure(code: "UnsupportedSurface", message: "Window geometry unavailable.") }
             let title = string(axWindow, "AXTitle")
-            let matches = content.windows.filter { $0.owningApplication?.processID == targetPID && $0.title == title && abs($0.frame.width - frame.width) < 2 && abs($0.frame.height - frame.height) < 2 }
+            let expectedID = backgroundInput.windowID(axWindow)
+            let matches = content.windows.filter { candidate in
+                guard candidate.owningApplication?.processID == targetPID else { return false }
+                if let expectedID { return candidate.windowID == expectedID }
+                return candidate.title == title && abs(candidate.frame.width - frame.width) < 2 && abs(candidate.frame.height - frame.height) < 2
+            }
             guard matches.count == 1, let window = matches.first else {
                 throw DriverFailure(code: "AmbiguousTarget", message: "Could not bind capture to exactly one accessible window.")
             }
             let config = SCStreamConfiguration()
             config.width = max(1, Int(frame.width)); config.height = max(1, Int(frame.height))
             config.showsCursor = false
+            config.ignoreShadowsSingleWindow = true
+            config.ignoreGlobalClipSingleWindow = true
             let image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: window), configuration: config)
             guard let data = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]), data.count <= 6_000_000 else {
                 throw DriverFailure(code: "CaptureFailed", message: "Screenshot encoding failed or image exceeds limit.")
             }
+            lastCaptureImage = image
             captureFrame = frame; captureGeneration = generation
-            return ["base64": data.base64EncodedString(), "width": config.width, "height": config.height]
+            return ["base64": data.base64EncodedString(), "width": config.width, "height": config.height, "origin": ["x": frame.minX, "y": frame.minY]]
         }
         throw DriverFailure(code: "UnsupportedPlatform", message: "Visual fallback requires macOS 14 or later.")
+    }
+
+    func detect(_ request: [String: Any], fromFile: Bool = false) async throws -> [String: Any] {
+        let started = Date()
+        let image: CGImage
+        if fromFile {
+            guard let path = request["imagePath"] as? String,
+                  let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+                  let bytes = attributes[.size] as? Int, bytes <= 30_000_000,
+                  let loaded = NSImage(contentsOfFile: path), let cg = loaded.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+                throw DriverFailure(code: "InvalidImage", message: "Provide a readable image file under 30 MB.")
+            }
+            image = cg
+        } else {
+            _ = try await screenshot(request)
+            guard let captured = lastCaptureImage else { throw DriverFailure(code: "CaptureFailed", message: "No image captured.") }
+            image = captured
+        }
+        let threshold = request["threshold"] as? Double ?? 0.35
+        guard threshold.isFinite && threshold >= 0.1 && threshold <= 1 else { throw DriverFailure(code: "InvalidRequest", message: "Detection threshold must be 0.1–1.") }
+        let output = try visualDetector.analyze(image, modelPath: request["modelPath"] as? String, threshold: Float(threshold))
+        let prefix = fromFile ? "image-\(UUID().uuidString)" : generation
+        let captureID = UUID().uuidString
+        var regions: [[String: Any]] = []
+        if !fromFile { visualRegions.removeAll(); visualCapturedAt = Date() }
+        for (index, region) in output.regions.enumerated() {
+            let ref = "\(prefix):visual:\(captureID):\(index)"
+            if !fromFile, let digest = VisualDetector.patchDigest(image, bounds: region.bounds) { visualRegions[ref] = (region, digest) }
+            regions.append(region.json(ref: ref))
+        }
+        var result: [String: Any] = ["snapshotId": fromFile ? prefix : generation,
+            "width": image.width, "height": image.height, "regions": regions,
+            "model": output.model, "actionable": !fromFile, "durationMs": Int(Date().timeIntervalSince(started) * 1000)]
+        if let frame = captureFrame, !fromFile { result["origin"] = ["x": frame.minX, "y": frame.minY]; result["pointSize"] = ["width": frame.width, "height": frame.height] }
+        if let warning = output.warning { result["warning"] = warning }
+        if request["overlay"] as? Bool == true { result["overlay"] = VisualDetector.overlay(image, regions: output.regions) }
+        else { result["image"] = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.base64EncodedString() }
+        if let imageData = result["overlay"] as? String, imageData.utf8.count > 7_500_000 { result.removeValue(forKey: "overlay"); result["warning"] = "Overlay exceeds preview size limit; detections remain available." }
+        if let imageData = result["image"] as? String, imageData.utf8.count > 7_500_000 { result.removeValue(forKey: "image"); result["warning"] = "Image exceeds preview size limit; detections remain available." }
+        return result
+    }
+
+    func executeVisual(_ request: [String: Any]) async throws -> [String: Any] {
+        try requireAX(); try checkGeneration(request)
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID else {
+            throw DriverFailure(code: "UserActiveInTarget", message: "Visual background input yields while you use the target app.")
+        }
+        guard let action = request["action"] as? [String: Any], let ref = action["ref"] as? String,
+              let saved = visualRegions[ref], let capturedAt = visualCapturedAt, Date().timeIntervalSince(capturedAt) < 15,
+              captureGeneration == generation, let capturedFrame = captureFrame,
+              let window = targetWindow, windowFrame(window) == capturedFrame,
+              let windowID = backgroundInput.windowID(window) else {
+            throw DriverFailure(code: "StaleTarget", message: "Visual target is missing, expired, or moved. Observe with visual detection again.")
+        }
+        guard let capturedImage = lastCaptureImage else { throw DriverFailure(code: "StaleTarget", message: "Capture is no longer available.") }
+        let scaleX = capturedFrame.width / CGFloat(capturedImage.width)
+        let scaleY = capturedFrame.height / CGFloat(capturedImage.height)
+        let targetBounds = CGRect(x: capturedFrame.minX + saved.region.bounds.minX * scaleX, y: capturedFrame.minY + saved.region.bounds.minY * scaleY, width: saved.region.bounds.width * scaleX, height: saved.region.bounds.height * scaleY)
+        for savedElement in refs.values {
+            let element = savedElement.element
+            let protected = savedElement.role == "AXSecureTextField" || string(element, "AXSubrole") == "AXSecureTextField"
+            if protected, let bounds = windowFrame(element), bounds.intersects(targetBounds) {
+                throw DriverFailure(code: "ProtectedTarget", message: "Visual input cannot target a protected field.")
+            }
+        }
+        // Recheck pixels immediately before input; detections never authorize blind coordinates.
+        _ = try await screenshot(["snapshotId": generation])
+        guard let current = lastCaptureImage,
+              VisualDetector.patchDigest(current, bounds: saved.region.bounds) == saved.digest,
+              windowFrame(window) == capturedFrame else {
+            throw DriverFailure(code: "VisualTargetChanged", message: "Pixels changed at the detected target. Re-observe before selecting it again.")
+        }
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID else {
+            throw DriverFailure(code: "UserActiveInTarget", message: "You started using the target app during verification. No click sent.")
+        }
+        let point = CGPoint(x: targetBounds.midX, y: targetBounds.midY)
+        try backgroundInput.click(pid: targetPID, windowID: windowID, frame: capturedFrame, point: point)
+        generation = ""; refs.removeAll(); visualRegions.removeAll(); lastCaptureImage = nil
+        return ["delivery": "dispatchedUnverified", "message": "Visual region clicked in the background. Read fresh state to verify."]
     }
 
     func installedApps() -> [(id: String, name: String, url: URL)] {
@@ -518,7 +609,7 @@ struct SavedElement {
                     "backgroundPointerAvailable": backgroundInput.supportsPointer(),
                     "virtualCursor": virtualCursor.map { ["x": $0.x, "y": $0.y] } as Any? ?? NSNull()]
         case "status":
-            return ["accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess(), "platform": "macOS"]
+            return ["accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess(), "platform": "macOS", "visual": ["ocr": true, "modelInstalled": FileManager.default.fileExists(atPath: VisualDetector.defaultModelPath), "modelPath": VisualDetector.defaultModelPath]]
         case "requestAccessibility":
             let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
             return ["granted": AXIsProcessTrustedWithOptions(options)]
@@ -536,7 +627,10 @@ struct SavedElement {
             } else { requestedID = nil }
             let nodeLimit = min(2500, max(100, request["nodeLimit"] as? Int ?? 1000))
             return try snapshot(pid_t(pid), windowID: requestedID, nodeLimit: nodeLimit)
+        case "detect": return try await detect(request)
+        case "detectImage": return try await detect(request, fromFile: true)
         case "execute":
+            if let action = request["action"] as? [String: Any], action["kind"] as? String == "visualClick" { return try await executeVisual(request) }
             let result = try execute(request)
             try await Task.sleep(nanoseconds: 150_000_000)
             return result

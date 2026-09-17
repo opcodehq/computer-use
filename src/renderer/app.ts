@@ -1,6 +1,10 @@
+import { ComputerPreview } from './preview.js';
 import type { DesktopAPI, Event as DesktopEvent } from '../shared/contracts.js';
 declare global { interface Window { desktop: DesktopAPI } }
 const api = window.desktop;
+const preview = new ComputerPreview();
+const isPopout = new URLSearchParams(location.search).has('preview');
+if (isPopout) document.body.classList.add('popout');
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const start = element<HTMLButtonElement>('start');
 const stop = element<HTMLButtonElement>('stop');
@@ -13,6 +17,7 @@ const report = (e: unknown) => { error.textContent = (e instanceof Error ? e.mes
 let refreshing = false;
 async function refreshStatus() {
   const [status, connection] = await Promise.all([api.status(), api.connection()]);
+  element('detector-status').textContent = status.visual?.modelInstalled ? '✓ CoreML detector installed · local OCR available' : 'OCR available on macOS. Install a CoreML detector to enable YOLO.';
   element('permissions').textContent = status.error ?? `macOS Accessibility ${status.accessibility ? 'enabled' : 'needed'} · Capture ${status.screenRecording ? 'enabled' : 'optional'}`;
   for (const [id, enabled, name] of [['ax', status.accessibility, 'Accessibility'], ['screen', status.screenRecording, 'Optional capture']] as const) {
     const button = element<HTMLButtonElement>(id);
@@ -37,11 +42,17 @@ async function refresh() {
   } catch (e) { report(e); }
   finally { refreshing = false; }
 }
-window.addEventListener('focus', () => { if (!start.disabled) void refresh().catch(report); });
-target.onchange = () => localStorage.setItem('last-app', target.value);
+window.addEventListener('focus', () => { if (!isPopout && !start.disabled) void refresh().catch(report); });
+target.onchange = () => { localStorage.setItem('last-app', target.value); preview.reset(); };
 // Re-check while idle so permission grants are reflected without a restart.
-setInterval(() => { if (!start.disabled && document.visibilityState === 'visible') void refreshStatus().catch(report); }, 3000);
+setInterval(() => { if (!isPopout && !start.disabled && document.visibilityState === 'visible') void refreshStatus().catch(report); }, 3000);
 function onEvent(event: DesktopEvent) {
+  preview.update(event);
+  const previewStop = element<HTMLButtonElement>('preview-stop');
+  previewStop.hidden = !isPopout;
+  if (['starting','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) previewStop.disabled = false;
+  if (['failed','stopped','succeeded','blocked','uncertain','completed'].includes(event.state)) previewStop.disabled = true;
+  if (['starting','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) { start.disabled = true; stop.disabled = false; }
   element('state').textContent = event.state;
   element('state').dataset.active = String(['selecting', 'acting', 'observing'].includes(event.state));
   timeline.querySelector('.empty')?.remove();
@@ -57,16 +68,16 @@ function onEvent(event: DesktopEvent) {
   if (event.snapshot) {
     element('source').textContent = (event.snapshot.source === 'ax' ? 'macOS Accessibility' : 'Browser DOM') + (event.snapshot.truncated ? ' · Partial' : '');
     element('observation').textContent = `${event.snapshot.title}\n\n` + event.snapshot.nodes.map(n => `${' '.repeat(Math.min(n.depth, 8))}${n.role} ${n.name} ${n.value}${n.actions.length ? ' [' + n.actions.join(', ') + ']' : ''}`).join('\n');
-    element<HTMLImageElement>('capture').hidden = true;
+
   }
-  if (event.image) { const image = element<HTMLImageElement>('capture'); image.src = `data:image/png;base64,${event.image}`; image.hidden = false; }
+
   if (['failed', 'stopped', 'succeeded', 'blocked', 'uncertain', 'completed'].includes(event.state)) { start.disabled = false; stop.disabled = true; }
 }
 api.onEvent(onEvent);
 start.onclick = async () => {
-  error.textContent = ''; start.disabled = true; stop.disabled = false;
+  error.textContent = ''; start.disabled = true; stop.disabled = false; preview.reset(); timeline.replaceChildren();
   try {
-    await api.start({ goal: element<HTMLTextAreaElement>('goal').value, text: element<HTMLTextAreaElement>('task-text').value || undefined, mode: mode.value === 'jev' ? 'jev' : mode.value === 'browser' ? 'browser' : 'desktop', pid: Number(target.value), vision: element<HTMLInputElement>('vision').checked, autoActions: element<HTMLInputElement>('automatic').checked });
+    await api.start({ localVisual: element<HTMLInputElement>('local-visual').checked, overlay: element<HTMLInputElement>('overlay').checked, modelPath: element<HTMLInputElement>('model-path').value.trim() || undefined, goal: element<HTMLTextAreaElement>('goal').value, text: element<HTMLTextAreaElement>('task-text').value || undefined, mode: mode.value === 'jev' ? 'jev' : mode.value === 'browser' ? 'browser' : 'desktop', pid: Number(target.value), vision: element<HTMLInputElement>('vision').checked, autoActions: element<HTMLInputElement>('automatic').checked });
   } catch (e) { report(e); start.disabled = false; stop.disabled = true; }
 };
 stop.onclick = () => { stop.disabled = true; approve.hidden = true; void api.stop().catch(report); };
@@ -75,9 +86,10 @@ mode.onchange = () => {
   target.disabled = mode.value === 'browser';
   const single = mode.value === 'jev';
   element('planner-options').hidden = single;
+  element<HTMLInputElement>('local-visual').closest<HTMLElement>('.vision-options')!.hidden = !single;
   element('text-options').hidden = !single;
   element('planner-settings').hidden = single;
-  element('mode-hint').textContent = single ? 'Opens named apps or continues through control presses and supplied text entry. Only TypeSafe; no screenshots. Stops when complete, blocked, or uncertain.' : 'Review each action unless automatic actions are enabled. This mode requires a Claude planner.';
+  element('mode-hint').textContent = single ? 'Opens named apps or continues through control presses and supplied text entry. TypeSafe only. Optional vision runs locally; no screenshots are sent to Jev. Stops when complete, blocked, or uncertain.' : 'Review each action unless automatic actions are enabled. This mode requires a Claude planner.';
   start.textContent = single ? 'Run Jev task ↗' : 'Start task ↗';
 };
 mode.dispatchEvent(new Event('change'));
@@ -91,6 +103,21 @@ element('save').onclick = () => {
     void refreshStatus().catch(report);
   }).catch(report);
 };
-void refresh().catch(report);
+if (!isPopout) void refresh().catch(report);
 
 element('forget-key').onclick = () => { void api.forgetKey().then(refreshStatus).catch(report); };
+
+for (const id of ['local-visual','overlay','model-path']) {
+  const input = element<HTMLInputElement>(id);
+  const saved = localStorage.getItem(id);
+  if (input.type === 'checkbox') input.checked = saved === 'true'; else input.value = saved ?? '';
+  input.onchange = () => localStorage.setItem(id, input.type === 'checkbox' ? String(input.checked) : input.value);
+}
+element('preview').onclick = async () => {
+  error.textContent = '';
+  try { await api.preview({ pid: Number(target.value), overlay: element<HTMLInputElement>('overlay').checked, modelPath: element<HTMLInputElement>('model-path').value.trim() || undefined }); }
+  catch (e) { report(e); }
+};
+element('popout').onclick = () => { void api.popout().catch(report); };
+
+element('preview-stop').onclick = () => { void api.stop().catch(e => { element('preview-status').textContent = e instanceof Error ? e.message : String(e); }); };

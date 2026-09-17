@@ -48,6 +48,21 @@ avoid an extra observe unless needed. `act` can take a `candidateRefs` shortlist
 and its `snapshotId` through `--input-json`. Low confidence means inspect and
 resolve the local ambiguity; it does not require abandoning the task.
 
+When AX omits visual controls, use `observe --visual` to add local OCR and optional
+YOLO detections. Enable optional capture permission first; absent YOLO weights
+report OCR-only fallback. `click` accepts a current visual ref and rechecks its
+pixel patch before delivery. YOLO locates regions; it does not explain unlabeled
+icons. For those, use your existing harness vision on a fresh local image:
+
+```sh
+python3 /path/to/this/skill/scripts/jev.py capture --session task-unique-name --app 'Target App' --input-json '{"outputPath":"/tmp/jev-window-unique.png"}'
+```
+
+The PNG is created on the controlled Mac, with owner-only permissions, and never
+overwrites an existing file. Inspect it using the harness image tool. Do not treat
+an offline `detect_image` result as an actionable live ref. Pixels are not sent to
+Jev. `task --visual` enables the hybrid path for the whole multi-step task.
+
 Other commands accept structured `--input-json` arguments:
 - `installed_apps`, then `launch` with exact `app` name or bundle ID.
 - `windows` with `app`; `observe` with `app`, optional `windowId` and `nodeLimit`.

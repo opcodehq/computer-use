@@ -62,7 +62,7 @@ export const driverLayer = (binary: string, args: readonly string[] = []) => Lay
       yield* Queue.offer(input, new TextEncoder().encode(wire + '\n'));
       return yield* Deferred.await(deferred);
     }).pipe(
-      Effect.timeout('12 seconds'),
+      Effect.timeout(method === 'detect' || method === 'detectImage' ? '90 seconds' : '12 seconds'),
       Effect.catchTag('TimeoutError', () => Effect.fail(new DriverError({ code: 'DriverTimeout', message: 'Driver timed out; the last action may have been delivered.', delivery: method === 'execute' ? 'unknown' : 'notDispatched' }))),
       Effect.ensuring(Effect.sync(() => { pending.delete(id); })),
     );

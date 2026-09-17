@@ -1,3 +1,4 @@
+import { addVisualObservation, visualCandidates, type VisualOptions } from '../vision/observation.js';
 import { shareMenuForOpenedDocument } from './share-menu.js';
 import { decisionState } from './decision-state.js';
 import { pressCandidates, textCandidates, suppliedTextOptions, navigationCandidates } from './candidates.js';
@@ -54,7 +55,7 @@ export function acceptsTaskDecision(decision: TaskDecision, candidates: Candidat
     Number.isFinite(decision.navigationSupport) && decision.navigationSupport! >= 0.6 && decision.navigationSupport! <= 1;
 }
 export type NativeRequest = (method: string, args?: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>;
-export async function runDesktopGoal(goal: string, app: string, request: NativeRequest, decide: TaskDecider, emit: (event: Event) => void, signal: AbortSignal, exactText?: string) {
+export async function runDesktopGoal(goal: string, app: string, request: NativeRequest, decide: TaskDecider, emit: (event: Event) => void, signal: AbortSignal, exactText?: string, visualOptions: VisualOptions = {}) {
   const call = (method: string, args?: Record<string, unknown>) => { signal.throwIfAborted(); return request(method, args, signal); };
   // Exact launch requests resolve only against an observed installed-app catalog.
   // They never fall through into unrelated controls of the currently selected app.
@@ -90,8 +91,9 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
   let pendingSearchText: string | undefined;
 
   for (let step = 0; ; step++) {
-    const snapshot = Schema.decodeUnknownSync(SnapshotSchema)(await call('snapshot', { pid }));
-    emit({ state: 'selecting', message: `Step ${step + 1}: checking the goal and next operation.`, snapshot });
+    const observation = await addVisualObservation(Schema.decodeUnknownSync(SnapshotSchema)(await call('snapshot', { pid })), call, visualOptions);
+    const snapshot = observation.snapshot;
+    emit({ state: 'selecting', message: `Step ${step + 1}: checking the goal and next operation.`, snapshot, image: observation.image, imageFrame: observation.imageFrame });
     const loading = snapshot.nodes.some(node => !node.enabled && node.role === 'AXButton' && /^(processing|loading|saving)(?:\.\.\.)?$/i.test(node.name.trim()));
     if (loading) {
       loadingSince ||= Date.now();
@@ -106,8 +108,8 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
     if (fingerprint === previous) noChanges++; else noChanges = 0;
     if (noChanges >= 2) { emit({ state: 'blocked', message: 'Two actions produced no observed change. Stopped without further retries.', snapshot }); return; }
     previous = fingerprint;
-    const candidates = [...pressCandidates(snapshot), ...textCandidates(snapshot), ...navigationCandidates(snapshot)];
-    if (candidates.filter(c => c.action.kind === 'press').length > 254 || candidates.filter(c => c.action.kind !== 'press').length > 254) throw new Error('Too many targets. Narrow the application window.');
+    const candidates = [...pressCandidates(snapshot), ...textCandidates(snapshot), ...navigationCandidates(snapshot), ...visualCandidates(snapshot)];
+    if (candidates.filter(c => !['setValue','insertText'].includes(c.action.kind)).length > 254 || candidates.filter(c => ['setValue','insertText'].includes(c.action.kind)).length > 254) throw new Error('Too many targets. Narrow the application window.');
     if (pendingSearchText) {
       const fields = textCandidates(snapshot).filter(c => /search|query/i.test(c.description));
       if (fields.length === 1) {
@@ -193,7 +195,7 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
         continue;
       }
       selected = { ...selected, action: { ...selected.action, text: decision.text } };
-    } else if (!['press','focus','backgroundKey'].includes(selected.action.kind)) { emit({ state: 'blocked', message: 'Selected target does not support a press.', snapshot }); return; }
+    } else if (!['press','focus','backgroundKey','visualClick'].includes(selected.action.kind)) { emit({ state: 'blocked', message: 'Selected target does not support a press.', snapshot }); return; }
     validateCandidate(selected, snapshot, false);
     emit({ state: 'acting', message: `${decision.operation === 'write' ? 'Entering supplied text into' : 'Pressing'} ${selected.description}.`, candidate: selected });
     try { await call('execute', { snapshotId: snapshot.id, action: selected.action, animate: true }); }

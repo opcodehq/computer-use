@@ -21,6 +21,11 @@ export function validateCandidate(candidate: Candidate, snapshot: Snapshot, hasI
   }
   const node = snapshot.nodes.find(node => node.ref === action.ref);
   if (!node || !node.enabled || node.value === '[secure]') return reject('The target is missing, disabled, or protected.');
+  if (action.kind === 'visualClick') {
+    if (snapshot.source !== 'ax' || !snapshot.visual || !node.visualSource || !node.actions.includes('visualClick') ||
+        !node.ref.startsWith(`${snapshot.id}:visual:`) || !node.frame || !Number.isFinite(node.detectionConfidence) || node.detectionConfidence! < 0.35) reject('Visual click requires a detected region from this capture.');
+    return;
+  }
   if (action.kind === 'backgroundKey') {
     if (snapshot.source !== 'ax' || !node.focused || !['Tab','Shift+Tab','Option+Tab','Option+Shift+Tab','ArrowDown','ArrowUp','Enter','Escape','Space'].includes(action.text ?? '')) reject('Keyboard navigation requires the observed focused control and a supported key.');
     return;

@@ -1,3 +1,6 @@
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { addVisualObservation, visualCandidates, VisualSchema } from '../vision/observation.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { TypeSafeClient, choice } from '@typesafe-ai/sdk';
 import { Effect, ManagedRuntime, Schema } from 'effect';
@@ -48,6 +51,10 @@ export class DesktopTool {
       });
     };
     try {
+      if (name === 'detect_image') {
+        if (typeof input.imagePath !== 'string' || !input.imagePath) throw new Error('Supply imagePath on this Mac.');
+        return Schema.decodeUnknownSync(VisualSchema)(await request('detectImage', { imagePath: input.imagePath, modelPath: input.modelPath, overlay: input.overlay === true }));
+      }
       if (name === 'status') return { interactionMode: this.interactionMode, permissions: await request('status'), typesafeConfigured: Boolean(process.env.TYPESAFE_API_KEY) };
       if (name === 'apps') return await request('apps');
       if (name === 'installed_apps') return await request('installedApps');
@@ -62,11 +69,13 @@ export class DesktopTool {
         return { status: 'launched', app: matches[0], launch, next: 'List windows and observe; launch alone does not verify a usable window.' };
       }
       if (name === 'permission') return await request('requestAccessibility');
-      if (!['observe', 'wait', 'windows', 'act', 'execute', 'key', 'click', 'type'].includes(name)) throw new Error(`Unknown command: ${name}`);
+      if (!['capture', 'observe', 'wait', 'windows', 'act', 'execute', 'key', 'click', 'type'].includes(name)) throw new Error(`Unknown command: ${name}`);
       const args = Schema.decodeUnknownSync(Schema.Struct({
+        outputPath: Schema.optional(Schema.String),
         candidateRefs: Schema.optional(Schema.Array(Schema.String)), expectedOutput: Schema.optional(Schema.String),
         outputOnly: Schema.optional(Schema.Boolean), waitText: Schema.optional(Schema.String), timeoutMs: Schema.optional(Schema.Number), match: Schema.optional(Schema.Literals(['contains','exactLine'])),
         windowId: Schema.optional(Schema.Number), nodeLimit: Schema.optional(Schema.Number),
+        visual: Schema.optional(Schema.Boolean), modelPath: Schema.optional(Schema.String), overlay: Schema.optional(Schema.Boolean),
         app: Schema.String, instruction: Schema.optional(Schema.String),
         operation: Schema.optional(Schema.Literals(['press', 'focus', 'setValue', 'insertText'])),
         key: Schema.optional(Schema.String), snapshotId: Schema.optional(Schema.String), ref: Schema.optional(Schema.String),
@@ -82,13 +91,24 @@ export class DesktopTool {
       let pinnedWindow = args.windowId ?? (this.latest?.pid === pid ? this.latest.windowId : undefined);
       const observe = async () => {
         this.latest = undefined;
-        const snapshot = Schema.decodeUnknownSync(SnapshotSchema)(await request('snapshot', { pid, ...(pinnedWindow === undefined ? {} : { windowId: pinnedWindow }), ...(args.nodeLimit === undefined ? {} : { nodeLimit: args.nodeLimit }) }));
+        const semantic = Schema.decodeUnknownSync(SnapshotSchema)(await request('snapshot', { pid, ...(pinnedWindow === undefined ? {} : { windowId: pinnedWindow }), ...(args.nodeLimit === undefined ? {} : { nodeLimit: args.nodeLimit }) }));
+        const { snapshot } = await addVisualObservation(semantic, request, args);
         this.latest = snapshot;
         const scope = JSON.stringify([snapshot.pid, snapshot.windowId, snapshot.title]);
         if (scope !== this.historyScope) { this.history = []; this.historyScope = scope; }
         pinnedWindow = snapshot.windowId;
         return snapshot;
       };
+      if (name === 'capture') {
+        const snapshot = await observe();
+        const image = Schema.decodeUnknownSync(Schema.Struct({ base64: Schema.String, width: Schema.Number, height: Schema.Number }))(await request('screenshot', { snapshotId: snapshot.id }));
+        if (args.outputPath) {
+          const path = resolve(args.outputPath);
+          await writeFile(path, Buffer.from(image.base64, 'base64'), { mode: 0o600, flag: 'wx' });
+          return { snapshot, imagePath: path, width: image.width, height: image.height };
+        }
+        return { snapshot, image };
+      }
       if (name === 'wait') {
         if (!args.waitText || args.waitText.length > 4000) throw new Error('Supply 1–4000 characters of expected text.');
         const timeout = args.timeoutMs ?? 5000;
@@ -124,7 +144,7 @@ export class DesktopTool {
       if (name === 'type' && (!args.text || args.text.length > 8000)) throw new Error('Supply 1–8000 characters of exact text.');
       let candidates: Candidate[];
       if (clicked) {
-        candidates = [{ id: 'click', description: `Click ${clicked.role}: ${clicked.name}`, action: { kind: this.interactionMode === 'background' ? 'backgroundClick' : 'clickElement', ref: clicked.ref } }];
+        candidates = [{ id: 'click', description: `Click ${clicked.role}: ${clicked.name}`, action: { kind: clicked.actions.includes('visualClick') ? 'visualClick' : this.interactionMode === 'background' ? 'backgroundClick' : 'clickElement', ref: clicked.ref } }];
       } else if (keyboardTarget) {
         candidates = [{ id: 'keyboard', description: `${name === 'type' ? 'Type text' : `Press ${args.key}`} in ${keyboardTarget.name}`, action: { kind: name === 'type' ? 'backgroundText' : 'backgroundKey', ref: keyboardTarget.ref, text: name === 'type' ? args.text : args.key } }];
       } else if (name === 'key') {
@@ -135,7 +155,7 @@ export class DesktopTool {
         if (!node) throw new Error('Ref does not support the requested operation in this snapshot.');
         candidates = [{ id: 'exact', description: `${node.role}: ${node.name}`, action: { kind: operation, ref: node.ref, ...(args.text === undefined ? {} : { text: args.text }) } }];
       } else {
-        candidates = operation === 'press' ? pressCandidates(before) : textCandidates(before)
+        candidates = operation === 'press' ? [...pressCandidates(before), ...visualCandidates(before)] : textCandidates(before)
           .filter(candidate => before.nodes.find(node => node.ref === candidate.action.ref)?.actions.includes(operation))
           .map(candidate => ({ ...candidate, action: { ...candidate.action, kind: operation, text: args.text } }));
       }

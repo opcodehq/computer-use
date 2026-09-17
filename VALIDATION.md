@@ -138,3 +138,36 @@ snapshot; no action was dispatched, no MCP was used, and no nested agent ran.
 The full direct-CLI fixture test stopped before its first action because the
 fixture was foreground (`UserActiveInTarget`); that run is not an end-to-end pass.
 The earlier full MCP/native terminal acceptance remains a separate result.
+
+
+## Hybrid visual observation and preview workspace (current batch)
+
+- 64 tests, TypeScript check, and build passed after initial integration. New tests
+  cover fresh visual generations, coordinate translation, AX preference, secure
+  fields, malformed/low-confidence regions, denied-capture fallback, and a visual
+  task that re-observes before completion. These are integration fixtures, not a
+  live Jev model or Mac input success claim.
+- Pinned OmniParser v2 weights passed SHA-256 validation and exported successfully
+  to a Vision/NMS CoreML package using Ultralytics 8.3.78/coremltools 8.2. Export
+  output is `.context/vision/model.mlpackage` (not committed).
+- Actual PyTorch CPU inference on the three supplied TipTour screenshots returned
+  55, 39, and 19 regions at confidence >=0.35, 640px input; reported inference times
+  were 145, 153, and 134ms. This does not measure CoreML/Mac latency or icon semantics.
+- Renderer QA with a mocked DesktopAPI verified semantic preview layout, action
+  pointer coordinates, marker cleanup on Stop, and re-enabled task controls.
+  axe reported zero violations (one decorative glyph contrast check incomplete).
+  `.context/jev-workspace.png` is a UI fixture screenshot, not a live Zuse run.
+- The native compile request through RunLocalCommand timed out waiting for the Mac
+  client. Swift/CoreML compilation, real Apple OCR, target-window capture, native
+  visual-click delivery, and the Electron popout window on macOS remain unverified.
+  `scripts/vision-smoke.py` is ready for offline Mac acceptance without live input.
+- No isolated macOS login/VM was provisioned. Same-desktop background guards remain.
+  Apple developer setup was paused; this batch did not complete its outstanding forms.
+
+Final cloud checks for this batch: 66 tests pass; type check and build pass. The
+real Electron 44 app launched under Xvfb, created a separate preview BrowserWindow,
+and exposed the expected preload API. A dummy (noncredential) key was saved, the
+entire app exited and restarted, and the key remained configured while the renderer
+input stayed empty. Forget then removed it. This caught a destroyed-window IPC
+validation race, fixed before the second launch. These checks validate Electron
+on Linux, not macOS capture permissions or native input.

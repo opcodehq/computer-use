@@ -31,9 +31,9 @@ export const runnerLayer = (emit: (event: Event) => void) => Layer.effect(TaskRu
         })));
 
     return yield* Effect.gen(function*() {
-      for (let step = 0; step < 30; step++) {
+      for (let step = 0; ; step++) {
         yield* check();
-        emit({ state: 'observing', message: `Reading current state · step ${step + 1}/30` });
+        emit({ state: 'observing', message: `Reading current state · step ${step + 1}` });
         const snapshot = yield* observe();
         yield* check();
         emit({ state: 'deciding', message: `Read ${snapshot.nodes.length} controls and labels${snapshot.truncated ? ' (partial tree)' : ''}.`, snapshot });
@@ -47,11 +47,11 @@ export const runnerLayer = (emit: (event: Event) => void) => Layer.effect(TaskRu
             return;
           }
           const capture = yield* driver.request('screenshot', { snapshotId: snapshot.id }).pipe(Effect.flatMap(data => Effect.try({
-            try: () => Schema.decodeUnknownSync(Schema.Struct({ base64: Schema.String }))(data),
+            try: () => Schema.decodeUnknownSync(Schema.Struct({ base64: Schema.String, width: Schema.Number, height: Schema.Number, origin: Schema.Struct({ x: Schema.Number, y: Schema.Number }) }))(data),
             catch: () => new DriverError({ code: 'ProtocolError', message: 'Invalid image response.', delivery: 'notDispatched' }),
           })));
           image = capture.base64;
-          emit({ state: 'deciding', message: 'Using optional vision. This image is sent to Claude only.', image });
+          emit({ state: 'deciding', message: 'Using optional vision. This image is sent to Claude only.', image, imageFrame: { ...capture.origin, width: capture.width, height: capture.height } });
           proposal = yield* model.propose(state, image);
           yield* check();
         }
@@ -95,10 +95,7 @@ export const runnerLayer = (emit: (event: Event) => void) => Layer.effect(TaskRu
         emit({ state: 'verifying', message: 'Action dispatched; reading the actual result next.' });
         yield* Effect.sleep('300 millis');
       }
-      emit({ state: 'blocked', message: 'Reached the 30-step limit. Review progress before starting a new task.' });
     }).pipe(
-      Effect.timeout('10 minutes'),
-      Effect.catchTag('TimeoutError', () => Effect.fail(new PolicyError({ message: 'Reached the ten-minute task limit.' }))),
       Effect.ensuring(Effect.sync(() => { gate.finish(token); approvePending = undefined; })),
     );
   });
