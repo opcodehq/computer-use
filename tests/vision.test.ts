@@ -83,3 +83,41 @@ test('scales Retina image pixels to window points before merging', () => {
   assert.deepEqual(result.nodes[0]?.frame,{x:110,y:65,width:40,height:15});
   assert.throws(()=>fuseVisual(snapshot,{...visual,pointSize:{width:0,height:300}}));
 });
+
+test('changed visual target triggers a new observation and decision, not replay', async () => {
+  let observations=0, decisions=0;const refs:string[]=[];const events:Event[]=[];
+  await runDesktopGoal('Save the fixture','42',async(method,args)=>{
+    if(method==='apps')return[{pid:42,name:'Fixture'}];
+    if(method==='snapshot')return{...snapshot,id:`s${++observations}`,nodes:observations>=3?[{ref:'done',role:'AXStaticText',name:'Saved successfully',value:'',enabled:true,actions:[],depth:0}]:[]};
+    if(method==='detect')return{...visual,snapshotId:`s${observations}`,regions:visual.regions.map(r=>({...r,ref:`s${observations}:visual:0`}))};
+    if(method==='execute'){
+      refs.push((args?.action as {ref:string}).ref);
+      if(refs.length===1)throw Object.assign(Error('Target pixels changed'),{code:'VisualTargetChanged',delivery:'notDispatched'});
+    }
+    return{};
+  },async()=>++decisions<3?{operation:'press',target:'v0',confidence:1,complete:0}:{operation:'done',target:'none',confidence:1,complete:1},e=>events.push(e),new AbortController().signal,undefined,{visual:true});
+  assert.deepEqual(refs,['s1:visual:0','s2:visual:0']);
+  assert.equal(decisions,3);assert.equal(events.at(-1)?.state,'succeeded');
+  assert.ok(events.some(e=>e.state==='refreshing'));
+});
+
+test('unknown visual delivery never triggers automatic re-selection', async () => {
+  let dispatches=0,decisions=0;const events:Event[]=[];
+  await runDesktopGoal('Save','42',async(method)=>{
+    if(method==='apps')return[{pid:42,name:'Fixture'}];
+    if(method==='snapshot')return snapshot;
+    if(method==='detect')return visual;
+    dispatches++;throw Object.assign(Error('Disconnected'),{code:'VisualTargetChanged',delivery:'unknown'});
+  },async()=>{decisions++;return{operation:'press',target:'v0',confidence:1,complete:0};},e=>events.push(e),new AbortController().signal,undefined,{visual:true});
+  assert.equal(dispatches,1);assert.equal(decisions,1);assert.equal(events.at(-1)?.state,'uncertain');
+});
+
+test('Stop during optional perception cannot fall back into another model decision', async () => {
+  const controller=new AbortController();let decisions=0;
+  await assert.rejects(()=>runDesktopGoal('Save','42',async(method)=>{
+    if(method==='apps')return[{pid:42,name:'Fixture'}];
+    if(method==='snapshot')return snapshot;
+    controller.abort();throw controller.signal.reason;
+  },async()=>{decisions++;return{operation:'done',target:'none',confidence:1,complete:1};},()=>{},controller.signal,undefined,{visual:true}));
+  assert.equal(decisions,0);
+});

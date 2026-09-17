@@ -171,3 +171,15 @@ entire app exited and restarted, and the key remained configured while the rende
 input stayed empty. Forget then removed it. This caught a destroyed-window IPC
 validation race, fixed before the second launch. These checks validate Electron
 on Linux, not macOS capture permissions or native input.
+
+## Visual refusal recovery
+
+A native `StaleTarget`/`VisualTargetChanged` refusal with explicit `notDispatched`
+now refreshes perception and asks for a new decision (at most two consecutive
+recovery refreshes). It never reuses the old visual ref. Unknown delivery still
+stops without another decision. Stop during perception is checked before selection,
+including when capture fallback would otherwise swallow an abort. Eleven vision
+tests pass, including these three cases; type check and build pass.
+
+A subsequent read-only Mac build-status request also timed out waiting for the
+client. It provided no evidence that either earlier build ran or finished.

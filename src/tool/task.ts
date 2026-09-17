@@ -83,7 +83,7 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
   const textValues = suppliedTextOptions(goal, exactText);
   const history: string[] = [];
   const visitedStates = new Map<string, number>();
-  let previous = '', noChanges = 0, loadingSince = 0, uncertaintyRefreshes = 0;
+  let previous = '', noChanges = 0, loadingSince = 0, uncertaintyRefreshes = 0, visualRefreshes = 0;
   // A literal subject supplied by the user can narrow a crowded list through Search.
   const subjectMatch = /(?:latest|newest|most recent)\s+(.+?)\s+(?:notes?|documents?|files?|reports?)\b/i.exec(goal);
   const searchSubject = subjectMatch?.[1]?.trim();
@@ -92,6 +92,7 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
 
   for (let step = 0; ; step++) {
     const observation = await addVisualObservation(Schema.decodeUnknownSync(SnapshotSchema)(await call('snapshot', { pid })), call, visualOptions);
+    signal.throwIfAborted();
     const snapshot = observation.snapshot;
     emit({ state: 'selecting', message: `Step ${step + 1}: checking the goal and next operation.`, snapshot, image: observation.image, imageFrame: observation.imageFrame });
     const loading = snapshot.nodes.some(node => !node.enabled && node.role === 'AXButton' && /^(processing|loading|saving)(?:\.\.\.)?$/i.test(node.name.trim()));
@@ -200,8 +201,20 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
     emit({ state: 'acting', message: `${decision.operation === 'write' ? 'Entering supplied text into' : 'Pressing'} ${selected.description}.`, candidate: selected });
     try { await call('execute', { snapshotId: snapshot.id, action: selected.action, animate: true }); }
     catch (error) {
+      signal.throwIfAborted();
+      // A native refusal before dispatch permits a fresh decision, never replay of
+      // the saved coordinates. Unknown delivery must stop for host verification.
+      if (selected.action.kind === 'visualClick' && error instanceof Error &&
+          'delivery' in error && error.delivery === 'notDispatched' &&
+          'code' in error && ['StaleTarget', 'VisualTargetChanged'].includes(String(error.code)) && visualRefreshes < 2) {
+        visualRefreshes++;
+        history.push('Visual target changed before dispatch. No input was sent; select again from fresh evidence.');
+        emit({ state: 'refreshing', message: 'The visual target changed before the click. Reading fresh evidence and selecting again; no input was sent.' });
+        continue;
+      }
       emit({ state: 'uncertain', message: `macOS did not confirm this action: ${error instanceof Error ? error.message : String(error)}. Stopped without replaying it.` }); return;
     }
+    visualRefreshes = 0;
     history.push(`${decision.operation === 'write' ? 'Entered supplied text into' : 'Pressed'} ${selected.description}; result must be checked against the next observation.`);
     await new Promise(resolve => setTimeout(resolve, 200));
   }

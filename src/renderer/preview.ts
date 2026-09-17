@@ -16,6 +16,7 @@ export class ComputerPreview {
   }
   update(event: Event) {
     if (event.state === 'starting') this.reset();
+    if (event.state === 'refreshing') this.clearMarkers();
     if (event.image && event.imageFrame) {
       this.hasImage = true; this.frame = event.imageFrame;
       const image = el<HTMLImageElement>('capture'); image.src = `data:image/png;base64,${event.image}`; image.hidden = false;
