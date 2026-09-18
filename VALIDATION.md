@@ -183,3 +183,49 @@ tests pass, including these three cases; type check and build pass.
 
 A subsequent read-only Mac build-status request also timed out waiting for the
 client. It provided no evidence that either earlier build ran or finished.
+
+## Mac resumed: real native hybrid vision acceptance
+
+Native Swift compilation succeeded on the arm64 Mac. The pinned CoreML UI model
+was exported on the Mac and installed in the default Application Support path.
+Offline native Apple OCR found 56 regions in a supplied screenshot (528 ms).
+YOLO+OCR returned 73 regions with no warning (1837 ms initial load). The native
+OCR overlay was inspected and matched the source image orientation and text boxes.
+
+Live testing uncovered and fixed stale app inventory: the persistent driver could
+not see a newly launched fixture while a fresh driver could. Moving blocking stdin
+reads off the main actor allowed NSWorkspace lifecycle updates; the corrected
+persistent driver discovered subsequent disposable fixture launches.
+
+Capture permission depends on the responsible host. The shell-launched driver
+reported false while the Electron app launched through Launch Services reported
+true. The Mac `desktop` command now launches the app bundle through `open`.
+
+The first visual run clicked correctly but rejected completion. Read-only Jev
+comparison on fixture evidence returned revised Noul scores 0.03 before, 0.91 after,
+and 0.04 with the success label removed. Completion now requires agreement from
+both the done-operation confidence and fresh-outcome probability at >=0.90; this is
+a provisional gate matching the planner route, not a calibrated general accuracy
+claim. Input authorization/selection thresholds were not changed.
+
+Final real Electron/Jev/CoreML/native run using an inaccessible canvas fixture:
+- `starting → selecting → acting → selecting → succeeded`
+- Independent fixture counter: exactly 1 click.
+- Fresh visual readback: `VISION TEST PASSED`, `Clicks: 1`.
+- Foreground PID remained 90636; cursor position unchanged; 0 hardware mouse moves.
+- Initial perception: 1680 ms; follow-up: 114 ms.
+- Actual Mac popout showed the completed image; pointer and ripple were hidden.
+- A prior run had a foreground change without enough PID evidence to attribute it;
+  the subsequent controlled runs recorded unchanged foreground and cursor.
+
+70 cloud tests, type checking, and build passed before the final picker polish.
+The replayable Mac acceptance is `scripts/mac-vision-session.mjs`; it uses Node for
+Playwright because Bun's CDP WebSocket connection stalled in this environment.
+`.context/jev-mac-completed.png` is an actual Electron screenshot of the test result.
+This validates the disposable canvas workflow, not arbitrary-app or full lifecycle
+reliability. Separate macOS user/VM isolation remains unimplemented.
+
+Final picker QA passed after the Mac screenshot exposed a misleading default:
+the picker now starts at “Choose an application,” follows the actual running
+snapshot's app, locks app/mode during a task, and unlocks them on completion.
+The mocked renderer check verified all four behaviors with no page errors.

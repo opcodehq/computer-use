@@ -644,7 +644,9 @@ struct SavedElement {
 @main struct Main {
     @MainActor static func main() async {
         let driver = Driver()
-        while let line = readLine() {
+        // Do not block the main actor on stdin: AppKit/NSWorkspace must process
+        // application lifecycle notifications between protocol requests.
+        while let line = await Task.detached(priority: .userInitiated, operation: { readLine() }).value {
             var id = ""
             var envelope: [String: Any]
             do {

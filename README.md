@@ -219,6 +219,12 @@ and controls go to Jev; pixels stay local. `capture` lets the host coding agent
 inspect a screenshot when an unlabeled icon needs actual visual understanding.
 
 The preview shows the selected Mac window; it is not a separate OS login/VM.
-Background delivery still yields to your activity in the target app. Native vision
-compilation and live capture validation are pending Mac connectivity; see
-[VALIDATION.md](VALIDATION.md) for what has actually passed.
+Background delivery still yields to your activity in the target app. Native compilation, local CoreML/OCR, and a complete disposable canvas click task
+have passed on the Mac, including unchanged foreground and hardware cursor. See
+[VALIDATION.md](VALIDATION.md) for the measured scope and remaining limitations.
+
+
+On macOS, `bun run desktop` uses Launch Services so capture permission belongs to
+the Electron app. Quit an existing instance after rebuilding before reopening it.
+CLI hosts have their own macOS capture grant; enabling capture in Electron does not
+necessarily enable capture for a terminal or Conductor command host.

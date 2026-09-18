@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runDesktopGoal, acceptsTaskDecision } from '../src/tool/task.js';
+import { runDesktopGoal, acceptsTaskDecision, acceptsTaskCompletion } from '../src/tool/task.js';
 import type { Event } from '../src/shared/contracts.js';
 test('open Granola resolves installed app without pressing Finder controls', async () => {
   const calls: string[] = []; const events: Event[] = [];
@@ -105,4 +105,13 @@ test('separate navigation evidence never authorizes uncertain submissions or wri
   assert.equal(acceptsTaskDecision({ ...base, navigationSupport: 0.59 }, options), false);
   assert.equal(acceptsTaskDecision({ ...base, confidence: NaN }, options), false);
   assert.equal(acceptsTaskDecision({ ...base, target: 'invented' }, options), false);
+});
+
+
+test('completion requires both operation agreement and fresh outcome evidence', () => {
+  const decision = { operation:'done',target:'none',confidence:.95,complete:.91 };
+  assert.equal(acceptsTaskCompletion(decision),true);
+  for (const change of [{confidence:.89},{complete:.89},{complete:NaN},{complete:1.1},{confidence:Infinity},{operation:'press'}]) {
+    assert.equal(acceptsTaskCompletion({...decision,...change}),false);
+  }
 });

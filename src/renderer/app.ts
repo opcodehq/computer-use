@@ -35,9 +35,9 @@ async function refresh() {
   refreshing = true;
   try {
     await refreshStatus();
-    const previous = target.value || localStorage.getItem('last-app') || '';
+    const previous = target.value && target.value !== '0' ? target.value : localStorage.getItem('last-app') || '';
     const apps = await api.apps();
-    target.replaceChildren(...apps.map(app => new Option(app.name, String(app.pid))));
+    target.replaceChildren(new Option('Choose an application', '0'), ...apps.sort((a,b) => a.name.localeCompare(b.name)).map(app => new Option(app.name, String(app.pid))));
     if (apps.some(a => String(a.pid) === previous)) target.value = previous;
   } catch (e) { report(e); }
   finally { refreshing = false; }
@@ -52,7 +52,7 @@ function onEvent(event: DesktopEvent) {
   previewStop.hidden = !isPopout;
   if (['starting','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) previewStop.disabled = false;
   if (['failed','stopped','succeeded','blocked','uncertain','completed'].includes(event.state)) previewStop.disabled = true;
-  if (['starting','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) { start.disabled = true; stop.disabled = false; }
+  if (['starting','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) { start.disabled = true; stop.disabled = false; target.disabled = true; mode.disabled = true; }
   element('state').textContent = event.state;
   element('state').dataset.active = String(['selecting', 'acting', 'observing'].includes(event.state));
   timeline.querySelector('.empty')?.remove();
@@ -66,12 +66,17 @@ function onEvent(event: DesktopEvent) {
   timeline.append(row); while (timeline.children.length > 150) timeline.firstElementChild?.remove(); timeline.scrollTop = timeline.scrollHeight;
   approve.hidden = event.state !== 'approval';
   if (event.snapshot) {
+    if (start.disabled && !isPopout) {
+      const pid = String(event.snapshot.pid);
+      if (![...target.options].some(option => option.value === pid)) target.add(new Option(event.snapshot.title, pid));
+      target.value = pid;
+    }
     element('source').textContent = (event.snapshot.source === 'ax' ? 'macOS Accessibility' : 'Browser DOM') + (event.snapshot.truncated ? ' · Partial' : '');
     element('observation').textContent = `${event.snapshot.title}\n\n` + event.snapshot.nodes.map(n => `${' '.repeat(Math.min(n.depth, 8))}${n.role} ${n.name} ${n.value}${n.actions.length ? ' [' + n.actions.join(', ') + ']' : ''}`).join('\n');
 
   }
 
-  if (['failed', 'stopped', 'succeeded', 'blocked', 'uncertain', 'completed'].includes(event.state)) { start.disabled = false; stop.disabled = true; }
+  if (['failed', 'stopped', 'succeeded', 'blocked', 'uncertain', 'completed'].includes(event.state)) { start.disabled = false; stop.disabled = true; target.disabled = mode.value === 'browser'; mode.disabled = false; }
 }
 api.onEvent(onEvent);
 start.onclick = async () => {

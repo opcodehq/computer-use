@@ -19,7 +19,7 @@
     "check": "tsc --noEmit",
     "test": "bun test",
     "mcp": "bun dist/cli.mjs mcp",
-    "desktop": "electron ."
+    "desktop": "bun scripts/desktop.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.126.0",
