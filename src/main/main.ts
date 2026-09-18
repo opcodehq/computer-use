@@ -77,7 +77,7 @@ ipcMain.handle('apps', async event => { trusted(event); return runtime.runPromis
 ipcMain.handle('popout', async event => {
   trusted(event);
   if (previewWindow && !previewWindow.isDestroyed()) { previewWindow.show(); return; }
-  previewWindow = new BrowserWindow({ width: 640, height: 490, minWidth: 400, minHeight: 280, title: 'Jev · Computer', alwaysOnTop: true, backgroundColor: '#101318', webPreferences: { preload: join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  previewWindow = new BrowserWindow({ width: 640, height: 490, minWidth: 400, minHeight: 280, title: 'Jev · Computer', ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, vibrancy: 'under-window' as const } : {}), alwaysOnTop: true, backgroundColor: '#101318', webPreferences: { preload: join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   previewWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   previewWindow.webContents.on('will-navigate', e => e.preventDefault());
   await previewWindow.loadFile(join(root, 'renderer/index.html'), { query: { preview: '1' } });
@@ -161,7 +161,7 @@ ipcMain.handle('stop', async event => {
   } finally { stopping = false; }
 });
 
-window = new BrowserWindow({ width: 1380, height: 900, minWidth: 900, minHeight: 650, backgroundColor: '#101318', title: 'Jev Desktop', webPreferences: { preload: join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+window = new BrowserWindow({ width: 1380, height: 900, minWidth: 900, minHeight: 650, backgroundColor: '#101318', title: 'Jev Desktop', ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const, vibrancy: 'under-window' as const } : {}), webPreferences: { preload: join(root, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
 window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 window.webContents.on('will-navigate', event => event.preventDefault());
 window.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));

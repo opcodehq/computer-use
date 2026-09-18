@@ -287,3 +287,18 @@ no detection result. The user screenshot showed 2598 ms of perception alone;
 these are different timing boundaries, not a controlled speedup ratio. Preview
 remains a captured frame, not a live video stream. 87 tests, typecheck and build
 passed. The updated Electron app was deployed and reopened on the Mac.
+
+## Glass interface refresh
+
+Restyled the workspace and floating preview with translucent panels, mint
+accents, softer window frames, and a floating toolbar. Optional text and vision
+controls live in a Task options disclosure. Added inset Mac title bars while
+retaining native window controls, draggable chrome, keyboard focus indicators,
+and reduced-motion behavior.
+
+Browser renderer checks used a mocked desktop bridge: main and 900px layouts,
+settings/permissions disclosures, active-task application locking, Stop, and the
+640px floating preview. No page errors or horizontal overflow were observed;
+floating Stop correctly became disabled after stopping. Build and typecheck
+passed. Mac deployment was not performed: the local command bridge timed out
+waiting for the client. Native title-bar appearance remains to be verified there.

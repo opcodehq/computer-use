@@ -5,6 +5,7 @@ const api = window.desktop;
 const preview = new ComputerPreview();
 const isPopout = new URLSearchParams(location.search).has('preview');
 if (isPopout) document.body.classList.add('popout');
+if (/Mac/.test(navigator.platform)) document.body.classList.add('platform-mac');
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const start = element<HTMLButtonElement>('start');
 const stop = element<HTMLButtonElement>('stop');
@@ -53,10 +54,11 @@ function onEvent(event: DesktopEvent) {
   if (['starting','waiting','recovering','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) previewStop.disabled = false;
   if (['failed','stopped','succeeded','blocked','uncertain','completed'].includes(event.state)) previewStop.disabled = true;
   if (['starting','waiting','recovering','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) { start.disabled = true; stop.disabled = false; target.disabled = true; mode.disabled = true; }
-  element('state').textContent = event.state;
+  element('state').textContent = event.state.replace(/^./, c => c.toUpperCase());
+  element('state').dataset.state = event.state;
   element('state').dataset.active = String(['selecting', 'acting', 'observing'].includes(event.state));
   timeline.querySelector('.empty')?.remove();
-  const row = document.createElement('li');
+  const row = document.createElement('li'); row.dataset.state = event.state;
   const label = document.createElement('strong'); label.textContent = event.state;
   const message = document.createElement('span'); message.textContent = event.message;
   row.append(label, message);
