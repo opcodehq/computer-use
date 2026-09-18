@@ -302,3 +302,13 @@ settings/permissions disclosures, active-task application locking, Stop, and the
 floating Stop correctly became disabled after stopping. Build and typecheck
 passed. Mac deployment was not performed: the local command bridge timed out
 waiting for the client. Native title-bar appearance remains to be verified there.
+
+Mac connection resumed and the glass interface was deployed and reopened.
+Actual Electron checks confirmed the Mac layout class, saved connection, both
+permissions enabled, settings disclosure, and no horizontal overflow in the main
+window or 640×490 pop-out. A disposable native AppKit fixture supplied the capture
+without exposing browser content. The image fit at 550×341 points inside the
+floating stage, the toolbar was visible, and capture plus screenshot verification
+took 481 ms. No renderer errors were observed. Actual renderer screenshots are
+saved under `.context/jev-glass-mac-*.png`; native traffic-light rendering is not
+included in CDP page screenshots.
