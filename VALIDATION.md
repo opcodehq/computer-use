@@ -261,3 +261,29 @@ This verifies native form progression, not Safari custom dropdowns, download fil
 verification, or arbitrary cross-app planning. Apple/WorkOS setup remains unfinished.
 In-run progress memory is not durable checkpointing. Separate desktop isolation
 remains unimplemented.
+
+## Safari selector recovery and preview latency
+
+Live Apple setup exposed omitted focus-only toolbar buttons, missing ancestor
+labels on custom selectors, and discarded AXPress support on single-line fields.
+Added those candidates, Space activation for focused buttons, and exact named
+selector inspection (focus then ArrowDown once, without accepting a value).
+Ambiguous supplied text can prepare a confidently identified field without typing.
+Verified focus preparation may proceed below the general choice-confidence floor;
+its separate navigation support check remains required. Writes and submission
+thresholds were not reduced.
+
+Real Safari testing reached the Website URLs selector and announced two results,
+but did not expose the saved URL labels. A blocker screenshot also showed no
+expanded options. Callback persistence therefore remains unverified. WorkOS
+provider setup did not complete. No key was downloaded again. Downloads searches
+were misleading because glob/os.walk suppressed an OS permission error; an
+explicit directory read confirmed EPERM. The user will enter the key themselves.
+
+Plain preview previously ran OCR/YOLO before displaying a frame. It now uses the
+native screenshot request directly; overlays still request detection. Actual Mac
+preview completed in 450 ms including AX observation and IPC, with an image and
+no detection result. The user screenshot showed 2598 ms of perception alone;
+these are different timing boundaries, not a controlled speedup ratio. Preview
+remains a captured frame, not a live video stream. 87 tests, typecheck and build
+passed. The updated Electron app was deployed and reopened on the Mac.

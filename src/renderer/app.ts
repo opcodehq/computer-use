@@ -120,8 +120,12 @@ for (const id of ['local-visual','overlay','model-path']) {
 }
 element('preview').onclick = async () => {
   error.textContent = '';
+  const button = element<HTMLButtonElement>('preview');
+  button.disabled = true;
+  element('preview-status').textContent = 'Capturing window…';
   try { await api.preview({ pid: Number(target.value), overlay: element<HTMLInputElement>('overlay').checked, modelPath: element<HTMLInputElement>('model-path').value.trim() || undefined }); }
-  catch (e) { report(e); }
+  catch (e) { report(e); element('preview-status').textContent = 'Capture failed; displayed frame has not updated.'; }
+  finally { button.disabled = false; }
 };
 element('popout').onclick = () => { void api.popout().catch(report); };
 

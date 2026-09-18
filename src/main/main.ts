@@ -1,3 +1,4 @@
+import { capturePreview } from '../vision/preview.js';
 import { addVisualObservation } from '../vision/observation.js';
 import { SnapshotSchema } from '../shared/contracts.js';
 import { SettingsStore } from './settings.js';
@@ -92,8 +93,12 @@ ipcMain.handle('preview', async (event, value: unknown) => {
   previewBusy = true;
   try {
     const snapshot = Schema.decodeUnknownSync(SnapshotSchema)(await request('snapshot', { pid: input.pid }));
-    const result = await addVisualObservation(snapshot, request, { visual: true, overlay: input.overlay, modelPath: input.modelPath });
-    emit({ state: 'preview', message: result.snapshot.visual?.warning ?? 'Local window preview. Pixels stay on this Mac.', ...result });
+    if (!input.overlay) {
+      emit(await capturePreview(snapshot, request));
+    } else {
+      const result = await addVisualObservation(snapshot, request, { visual: true, overlay: true, modelPath: input.modelPath });
+      emit({ state: 'preview', message: result.snapshot.visual?.warning ?? 'Local window preview. Pixels stay on this Mac.', ...result });
+    }
   } finally { previewBusy = false; }
 });
 ipcMain.handle('permission', async (event, kind: unknown) => {
