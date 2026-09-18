@@ -37,7 +37,7 @@ export function fuseVisual(snapshot: Snapshot, visual: VisualObservation): Snaps
       n.actions.some(a => ['AXPress','setValue','insertText'].includes(a)) && intersection(frame,n.frame)/Math.min(area(frame),area(n.frame)) > 0.75 &&
       Math.max(area(frame),area(n.frame))/Math.min(area(frame),area(n.frame)) < 5);
     if (semantic) {
-      if (!semantic.name && !semantic.value && region.label) {
+      if (!semantic.name && !semantic.value && region.label && !/^(icon|unlabeled control)$/i.test(region.label.trim())) {
         const index = nodes.findIndex(n => n.ref === semantic.ref);
         nodes[index] = { ...nodes[index]!, name: region.label, visualSource: region.source, detectionConfidence: region.confidence };
       }

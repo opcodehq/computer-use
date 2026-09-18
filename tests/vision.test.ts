@@ -31,6 +31,12 @@ test('does not recover protected fields or malformed detections', () => {
     assert.equal(fuseVisual(snapshot,{...visual,regions:[region]}).nodes.length,0);
   }
 });
+test('generic detector labels do not replace a form fields contextual name', () => {
+  const node = {ref:'s:0',role:'AXTextArea',name:'',value:'',enabled:true,actions:['setValue'],depth:1,frame:{x:120,y:80,width:80,height:30}};
+  const result = fuseVisual({...snapshot,nodes:[node]},{...visual,regions:visual.regions.map(r=>({...r,label:'icon'}))});
+  assert.equal(result.nodes[0]?.name,'');
+  assert.equal(result.nodes.length,1);
+});
 test('denied capture keeps AX evidence with an explicit warning', async () => {
   const result=await addVisualObservation(snapshot,async()=>{throw Error('ScreenRecordingDenied');},{visual:true});
   assert.equal(result.snapshot.nodes,snapshot.nodes); assert.match(result.snapshot.visual!.warning!,/ScreenRecordingDenied/);

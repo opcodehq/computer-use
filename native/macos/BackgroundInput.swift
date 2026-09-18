@@ -35,6 +35,12 @@ final class BackgroundInput {
     func windowInfo(_ id: CGWindowID) -> [String: Any]? {
         (CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]])?.first
     }
+    // kCGWindowIsOnscreen is optional metadata. Its absence is not false.
+    // Query membership in the on-screen list instead, preserving query failure.
+    func isOnScreen(_ id: CGWindowID) -> Bool? {
+        guard let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else { return nil }
+        return windows.contains { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == id }
+    }
     func supportsPointer() -> Bool {
         symbol(sky, "SLEventPostToPid", PostFunction.self) != nil &&
         symbol(sky, "CGEventSetWindowLocation", LocalPointFunction.self) != nil &&
@@ -85,8 +91,11 @@ final class BackgroundInput {
               window[kCGWindowLayer as String] as? Int == 0 else {
             throw DriverFailure(code: "StaleTarget", message: "Window ownership changed before background dispatch.")
         }
-        guard window[kCGWindowIsOnscreen as String] as? Bool == true else {
-            throw DriverFailure(code: "WindowOffScreen", message: "WindowServer reports the target off-screen. This background transport cannot verify delivery there; no input sent and no Space switch attempted.")
+        guard let onScreen = isOnScreen(windowID) else {
+            throw DriverFailure(code: "BackgroundUnavailable", message: "WindowServer visibility query failed. No input sent.")
+        }
+        guard onScreen else {
+            throw DriverFailure(code: "WindowOffScreen", message: "The target window is absent from WindowServer's current on-screen list. This does not mean the app is unresponsive. No input sent and no Space switch attempted.")
         }
         let source = CGEventSource(stateID: .privateState)
         let group = Int64.random(in: 1...Int64(Int32.max))

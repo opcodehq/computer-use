@@ -174,7 +174,7 @@ struct SavedElement {
                 "windowListed": windows.contains { CFEqual($0, window) }]
         if let id = backgroundInput.windowID(window) {
             result["windowId"] = Int(id)
-            if let info = backgroundInput.windowInfo(id) { result["windowOnScreen"] = (info[kCGWindowIsOnscreen as String] as? Bool) ?? false }
+            if let onScreen = backgroundInput.isOnScreen(id) { result["windowOnScreen"] = onScreen }
         }
         return result
     }
@@ -598,7 +598,7 @@ struct SavedElement {
             return candidates.compactMap { window -> [String: Any]? in
                 guard let id = backgroundInput.windowID(window), ids.insert(id).inserted else { return nil }
                 var item: [String: Any] = ["windowId": Int(id), "title": string(window, "AXTitle"), "minimized": (value(window, "AXMinimized") as? Bool) ?? false]
-                if let info = backgroundInput.windowInfo(id) { item["onScreen"] = (info[kCGWindowIsOnscreen as String] as? Bool) ?? false }
+                if let onScreen = backgroundInput.isOnScreen(id) { item["onScreen"] = onScreen }
                 return item
             }
         case "inputState":
