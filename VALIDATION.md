@@ -312,3 +312,13 @@ floating stage, the toolbar was visible, and capture plus screenshot verificatio
 took 481 ms. No renderer errors were observed. Actual renderer screenshots are
 saved under `.context/jev-glass-mac-*.png`; native traffic-light rendering is not
 included in CDP page screenshots.
+
+## Flat typography refresh
+
+Replaced gradient/glass styling with off-white and charcoal surfaces, square
+controls, fine dividers, condensed display typography, and limited blue accents.
+Bundled Barlow Condensed with its OFL license and copied font assets during builds;
+removed native vibrancy. The stylesheet was rewritten rather than adding another
+layer of overrides. Browser checks passed for settings visibility, floating Stop,
+no page errors, and no horizontal overflow. Build and typecheck passed. Deployed
+and reopened the idle Mac app; font loading and flat surface verification passed.
