@@ -20,8 +20,9 @@ export function pressCandidates(snapshot: Snapshot): Candidate[] {
     if (!insideControl && node.role === 'AXStaticText' && /^(?:Today|Yesterday|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b.*)$/i.test(heading)) dateSection = heading;
     const section = [...sections.filter(s => s.scope >= 0 && s.at < index && ends[s.scope]! > index).map(s => s.text), dateSection].filter(Boolean).join(' · ');
     if (!node.enabled || node.value === '[secure]' || !node.actions.includes('AXPress')) return [];
-    // Text entry has its own typed operation; editor spans are not navigation targets.
-    if (['AXTextArea', 'AXTextField', 'AXComboBox'].includes(node.role)) return [];
+    // Multiline editors are not activation targets. Single-line custom selectors
+    // may advertise AXPress to open their options without writing a value.
+    if (node.role === 'AXTextArea') return [];
     let editorAncestor = parents[index] ?? -1;
     while (editorAncestor >= 0) {
       if (snapshot.nodes[editorAncestor]!.role === 'AXTextArea' && node.role !== 'AXLink') return [];
@@ -39,7 +40,7 @@ export function pressCandidates(snapshot: Snapshot): Candidate[] {
       if (label && !descendants.includes(label)) descendants.push(label);
       if (descendants.length >= 8) break;
     }
-    const label = node.name.trim() || descendants.join(' · ') || 'unlabelled control';
+    const label = node.name.trim() || (['AXTextField','AXComboBox','AXSearchField'].includes(node.role) ? precedingLabel(snapshot, index) : '') || descendants.join(' · ') || 'unlabelled control';
     if (node.role === 'AXGroup' && label === 'unlabelled control') return [];
     labels.set(node.ref, label);
     return [{ id: `a${index}`, description: `${node.role}: ${label.slice(0, 600)}; ref=${node.ref}; current value=${node.value.slice(0, 100)}${section ? `; preceding date section=${section}` : ''}`, action: { kind: 'press' as const, ref: node.ref } }];
@@ -88,16 +89,30 @@ export function suppliedTextOptions(goal: string, exact?: string): string[] {
   return [...values].filter(value => value.length <= 8000).slice(0, 254);
 }
 
-/** Associate an unlabeled field with the nearest preceding heading in its scope. */
+/** Walk enclosing groups for sibling labels; do not cross another input field. */
 function precedingLabel(snapshot: Snapshot, index: number): string {
-  const depth = snapshot.nodes[index]!.depth;
-  for (let i = index - 1; i >= 0; i--) {
-    const node = snapshot.nodes[i]!;
-    if (node.depth < depth) break;
-    if (node.depth === depth && node.role === 'AXHeading') return node.name || node.value;
-    if (node.depth === depth && ['AXTextField','AXTextArea'].includes(node.role)) break;
+  const labels: string[] = [];
+  let branch = index;
+  while (branch > 0) {
+    const depth = snapshot.nodes[branch]!.depth;
+    let parent = branch - 1;
+    while (parent >= 0 && snapshot.nodes[parent]!.depth >= depth) parent--;
+    const siblings = [];
+    for (let i = parent + 1; i < branch; i++) {
+      const node = snapshot.nodes[i]!;
+      if (node.depth === depth) siblings.push(node);
+    }
+    const heading = [...siblings].reverse().find(n => n.role === 'AXHeading');
+    let lastInput = -1;
+    siblings.forEach((n, i) => { if (['AXTextField','AXTextArea','AXComboBox'].includes(n.role)) lastInput = i; });
+    const label = heading && siblings.indexOf(heading) > lastInput ? heading.name || heading.value
+      : siblings.slice(lastInput + 1).find(n => n.role === 'AXStaticText' && n.value !== '[secure]' && (n.name || n.value).trim().length > 1 && (n.name || n.value).length < 120 && !/^\d+$/.test(n.name || n.value));
+    const text = typeof label === 'string' ? label : label ? label.name || label.value : '';
+    if (text && !labels.includes(text)) labels.unshift(text);
+    if (parent < 0 || ['AXWindow','AXWebArea','AXToolbar'].includes(snapshot.nodes[parent]!.role)) break;
+    branch = parent;
   }
-  return '';
+  return labels.join(' · ');
 }
 
 /** Keyboard navigation remains bound to the freshly observed focus receiver. */
@@ -108,6 +123,12 @@ export function navigationCandidates(snapshot: Snapshot): Candidate[] {
     let focusedDescendant = false;
     for (let i = index + 1; i < snapshot.nodes.length && snapshot.nodes[i]!.depth > node.depth; i++) {
       if (snapshot.nodes[i]!.focused) { focusedDescendant = true; break; }
+    }
+    if (!node.focused && node.actions.includes('focus') && !node.actions.includes('AXPress') && ['AXButton','AXMenuButton','AXPopUpButton'].includes(node.role) && node.name.trim()) {
+      candidates.push({ id: `f${index}`, description: `Focus ${node.role}: ${node.name} for keyboard activation; this control has no direct press action.`, action: { kind: 'focus', ref: node.ref } });
+    }
+    if (!node.focused && node.actions.includes('focus') && ['AXTextField','AXTextArea','AXComboBox','AXSearchField'].includes(node.role)) {
+      candidates.push({ id: `f${index}`, description: `Focus ${node.role}: ${node.name || precedingLabel(snapshot, index) || 'unnamed field'} without changing its value; use ArrowDown after focus to inspect a selector.`, action: { kind: 'focus', ref: node.ref } });
     }
     if (node.focused && !focusedDescendant && node.actions.length && node.role !== 'AXWindow') {
       const keys: Record<string, string> = {
@@ -120,6 +141,7 @@ export function navigationCandidates(snapshot: Snapshot): Candidate[] {
         Enter: 'Accept the highlighted dropdown option, or submit the focused form',
         Escape: 'Dismiss the open dropdown or dialog without accepting',
       };
+      if (['AXButton','AXMenuButton','AXPopUpButton'].includes(node.role)) keys.Space = 'Activate the focused button using Space';
       for (const [key, purpose] of Object.entries(keys)) candidates.push({
         id: `k${index}_${key.replaceAll('+','')}`, description: `${purpose} (key ${key}); receiver is focused ${node.role}: ${node.name || precedingLabel(snapshot, index) || node.value || 'unnamed control'}`,
         action: { kind: 'backgroundKey', ref: node.ref, text: key },

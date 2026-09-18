@@ -54,5 +54,40 @@ test('navigation offers only the focused receiver and excludes protected control
     { ref: 'c', role: 'AXSecureTextField', focused: true, value: '[secure]' },
   ].map(n => ({ ...n, name: '', enabled: true, depth: 1, actions: ['focus'] }));
   const options = navigationCandidates({ id: 's', source: 'ax', pid: 1, title: 'Apple', truncated: false, nodes });
-  assert.equal(options.length, 8); assert.ok(options.every(o => o.action.ref === 'a'));
+  const keys = options.filter(o => o.action.kind === 'backgroundKey');
+  assert.equal(keys.length, 8); assert.ok(keys.every(o => o.action.ref === 'a'));
+  assert.ok(options.every(o => o.action.ref !== 'c'));
+});
+
+test('Safari focus-only toolbar buttons have a keyboard activation route', () => {
+  const snapshot = { id: 's', source: 'ax' as const, pid: 1, title: 'Safari', truncated: false, nodes: [{ ref: 's:0', role: 'AXButton', name: 'Downloads', value: '', enabled: true, depth: 2, actions: ['focus'], focused: false }] };
+  assert.ok(navigationCandidates(snapshot).some(c => c.action.kind === 'focus' && c.action.ref === 's:0'));
+  snapshot.nodes[0]!.focused = true;
+  assert.ok(navigationCandidates(snapshot).some(c => c.action.kind === 'backgroundKey' && c.action.text === 'Space'));
+  snapshot.nodes[0]!.enabled = false;
+  assert.equal(navigationCandidates(snapshot).length, 0);
+});
+
+test('nested custom selectors retain section labels and can focus without writing', () => {
+  const nodes = [
+    { role: 'AXGroup', depth: 0, name: 'Configuration' },
+    { role: 'AXGroup', depth: 1 },
+    { role: 'AXStaticText', depth: 2, value: 'Primary App ID' },
+    { role: 'AXGroup', depth: 2 },
+    { role: 'AXGroup', depth: 3 },
+    { role: 'AXTextField', depth: 4 },
+    { role: 'AXHeading', depth: 1, name: 'Website URLs' },
+    { role: 'AXGroup', depth: 1 },
+    { role: 'AXStaticText', depth: 2, value: 'Search' },
+    { role: 'AXGroup', depth: 2 },
+    { role: 'AXGroup', depth: 3 },
+    { role: 'AXTextField', depth: 4 },
+  ].map((n,i) => ({ name:'',value:'',...n, ref:`s:${i}`, enabled:true, focused:false, actions:n.role==='AXTextField'?['setValue','focus','AXPress']:[] }));
+  const snapshot={id:'s',source:'ax' as const,pid:1,title:'Apple',truncated:false,nodes};
+  const fields=textCandidates(snapshot);
+  assert.match(fields[0]!.description,/Primary App ID/);
+  assert.doesNotMatch(fields[0]!.description,/Website URLs/);
+  assert.match(fields[1]!.description,/Website URLs.*Search/);
+  assert.ok(navigationCandidates(snapshot).some(c=>c.action.kind==='focus'&&c.action.ref==='s:11'&&c.description.includes('Website URLs')));
+  assert.ok(pressCandidates(snapshot).some(c=>c.action.ref==='s:11'&&c.description.includes('Website URLs')));
 });

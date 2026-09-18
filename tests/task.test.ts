@@ -201,3 +201,43 @@ test('completion can use a focused final-screen audit but never input-action sup
   for(const evidence of [.89,NaN,Infinity,1.1])assert.equal(acceptsTaskCompletion({...d,completionEvidence:evidence}),false);
   assert.equal(acceptsTaskCompletion({...d,confidence:.5,completionEvidence:1}),false);
 });
+
+
+test('verified focus preparation tolerates competing choices without relaxing press or write', () => {
+  const focus = { id: 'focus', description: 'Website URLs Search', action: { kind: 'focus' as const, ref: 's:1' } };
+  const decision = { operation:'press', target:'focus', confidence:0.19, complete:0, navigationSupport:0.9 };
+  assert.equal(acceptsTaskDecision(decision, [focus]), true);
+  assert.equal(acceptsTaskDecision({...decision,navigationSupport:0.5}, [focus]), false);
+  assert.equal(acceptsTaskDecision(decision, [{...focus,action:{kind:'press',ref:'s:1'}}]), false);
+  assert.equal(acceptsTaskDecision({...decision,operation:'write'}, [focus]), false);
+});
+
+
+test('confident field with ambiguous value prepares focus without typing', async () => {
+  const actions: unknown[] = []; let decisions = 0; let focused = false;
+  await runDesktopGoal('Inspect registered Website URLs', '42', async (method,args) => {
+    if (method === 'apps') return [{pid:42,name:'Safari'}];
+    if (method === 'snapshot') return {id:'s',source:'ax',pid:42,title:'Config',truncated:false,nodes:[{ref:'s:0',role:'AXTextField',name:'Website URLs Search',value:'',enabled:true,depth:0,actions:['setValue','focus'],focused}]};
+    if (method === 'execute') {actions.push(args?.action);focused=true;return {};}
+    throw Error(method);
+  }, async () => ++decisions === 1
+    ? {operation:'write',target:'t0',confidence:0.3,operationConfidence:0.8,complete:0}
+    : {operation:'done',target:'done',confidence:1,complete:1}, () => {}, new AbortController().signal);
+  assert.deepEqual(actions,[{kind:'focus',ref:'s:0'}]);
+});
+
+test('explicit selector inspection focuses its unique labeled field without guessing text', async () => {
+  const actions: unknown[] = []; let focused = false;
+  await runDesktopGoal('Inspect the Website URLs selector and verify the saved domain', '42', async (method,args) => {
+    if (method === 'apps') return [{pid:42,name:'Safari'}];
+    if (method === 'snapshot') return {id:'s',source:'ax',pid:42,title:'Config',truncated:false,nodes:[
+      {ref:'s:0',role:'AXHeading',name:'Website URLs',value:'',enabled:true,depth:0,actions:[]},
+      {ref:'s:1',role:'AXGroup',name:'',value:'',enabled:true,depth:0,actions:[]},
+      {ref:'s:2',role:'AXStaticText',name:'Search',value:'',enabled:true,depth:1,actions:[]},
+      {ref:'s:3',role:'AXTextField',name:'',value:'',enabled:true,depth:1,actions:['setValue','focus'],focused},
+    ]};
+    if (method === 'execute') { actions.push(args?.action);focused=true;return {}; }
+    throw Error(method);
+  }, async () => focused ? {operation:'done',target:'done',confidence:1,complete:1} : {operation:'blocked',target:'blocked',confidence:0.2,complete:0}, () => {}, new AbortController().signal);
+  assert.deepEqual(actions,[{kind:'focus',ref:'s:3'},{kind:'backgroundKey',ref:'s:3',text:'ArrowDown'}]);
+});
