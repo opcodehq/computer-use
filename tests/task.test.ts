@@ -84,7 +84,7 @@ test('task focuses an unfocused web field and uses a fresh ref for its write', a
 
 test('task focuses Safari address field without AXPress and uses a fresh ref for its write', async () => {
   const actions: unknown[] = []; let count = 0;
-  await runDesktopGoal('Navigate to "https://developer.apple.com"', 'Safari', async (method, args) => {
+  await runDesktopGoal('Set the address field to "https://developer.apple.com"', 'Safari', async (method, args) => {
     if (method === 'apps') return [{ pid: 42, name: 'Safari' }];
     if (method === 'snapshot') return { id: `s${count}`, source: 'ax', pid: 42, title: 'Form', truncated: false, nodes: [{ ref: `s${count}:0`, role: 'AXTextField', name: 'smart search field', value: count === 2 ? 'https://developer.apple.com' : '', focused: count > 0, enabled: true, depth: 1, actions: ['focus','setValue'] }] };
     actions.push(args?.action); count++; return {};
@@ -240,4 +240,28 @@ test('explicit selector inspection focuses its unique labeled field without gues
     throw Error(method);
   }, async () => focused ? {operation:'done',target:'done',confidence:1,complete:1} : {operation:'blocked',target:'blocked',confidence:0.2,complete:0}, () => {}, new AbortController().signal);
   assert.deepEqual(actions,[{kind:'focus',ref:'s:3'},{kind:'backgroundKey',ref:'s:3',text:'ArrowDown'}]);
+});
+
+test('explicit browser URL navigation prepares address and submits once before model decisions', async () => {
+  let focused=false,value='https://old.example/',version=0;const actions: any[]=[];
+  await runDesktopGoal('Navigate to "https://dashboard.workos.com" and inspect settings', '42', async(method,args)=>{
+    if(method==='apps')return [{pid:42,name:'Safari'}];
+    if(method==='snapshot')return {id:`s${version}`,source:'ax',pid:42,title:'Safari',truncated:false,nodes:[{ref:`s${version}:0`,role:'AXTextField',name:'smart search field',value,enabled:true,depth:0,actions:['setValue','focus'],focused}]};
+    if(method==='execute'){const a=args?.action as {kind:string,text?:string};actions.push(a);if(a.kind==='focus')focused=true;if(a.kind==='setValue')value=a.text!;version++;return {};}
+    throw Error(method);
+  },async()=>{assert.equal(actions.length,3);return {operation:'done',target:'done',confidence:1,complete:1}},()=>{},new AbortController().signal);
+  assert.deepEqual(actions.map(a=>a.kind),['focus','setValue','backgroundKey']);
+  assert.equal(actions[1].text,'https://dashboard.workos.com');assert.equal(actions[2].text,'Enter');
+  assert.deepEqual(actions.map(a=>a.ref),['s0:0','s1:0','s2:0']);
+});
+
+
+test('mentioned or prohibited navigation is not interpreted as a direct URL command', async () => {
+  for (const goal of ['Do not navigate to "https://example.test"', 'If approved later, navigate to "https://example.test"']) {
+    await runDesktopGoal(goal, '42', async method => {
+      if (method === 'apps') return [{pid:42,name:'Safari'}];
+      if (method === 'snapshot') return {id:'s',source:'ax',pid:42,title:'Safari',truncated:false,nodes:[{ref:'s:0',role:'AXTextField',name:'smart search field',value:'',enabled:true,depth:0,actions:['setValue','focus'],focused:true}]};
+      throw Error('No navigation input should be dispatched');
+    }, async()=>({operation:'done',target:'done',confidence:1,complete:1}),()=>{},new AbortController().signal);
+  }
 });

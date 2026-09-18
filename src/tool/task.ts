@@ -148,6 +148,8 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
   let searchRecoveryUsed = false;
   let pendingSearchText: string | undefined;
   let inspectionOpened = false;
+  const navigationUrl = /^(?:please\s+)?navigate to ["“]?(https?:\/\/[^\s"”<>]+)/i.exec(goal)?.[1]?.replace(/[.,;!?]+$/, '');
+  let navigationPhase: 'prepare' | 'submit' | 'done' = navigationUrl ? 'prepare' : 'done';
   const inspectionLabel = /\binspect (?:the )?([^.!?\n]{1,100}?) (?:selector|dropdown)\b/i.exec(goal)?.[1]?.trim().toLowerCase();
 
   for (let step = 0; ; step++) {
@@ -223,7 +225,20 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
     const inspectionNode = inspectionField && snapshot.nodes.find(n => n.ref === inspectionField.action.ref);
     const inspectionAction = !inspectionOpened && inspectionNode ? candidates.find(c => c.action.ref === inspectionNode.ref &&
       (inspectionNode.focused ? c.action.kind === 'backgroundKey' && c.action.text === 'ArrowDown' : c.action.kind === 'focus')) : undefined;
-    const decision = inspectionAction ? { operation: 'press', target: inspectionAction.id, confidence: 1, complete: 0 }
+    const addressFields = textCandidates(snapshot).filter(c => {
+      const node = snapshot.nodes.find(n => n.ref === c.action.ref);
+      return node?.role === 'AXTextField' && /^(smart search field|address and search bar)$/i.test(node.name);
+    });
+    const address = addressFields.length === 1 ? addressFields[0] : undefined;
+    const addressNode = address && snapshot.nodes.find(n => n.ref === address.action.ref);
+    if (navigationPhase === 'prepare' && addressNode?.value === navigationUrl) navigationPhase = 'done';
+    const navigationAction = navigationPhase === 'prepare' ? address : navigationPhase === 'submit' && addressNode?.focused && addressNode.value === navigationUrl
+      ? candidates.find(c => c.action.kind === 'backgroundKey' && c.action.ref === addressNode.ref && c.action.text === 'Enter') : undefined;
+    if (navigationPhase === 'submit' && !navigationAction) {
+      emit({ state: 'blocked', message: 'The prepared address field changed or lost focus before navigation. No Enter key was sent.', snapshot }); return;
+    }
+    const decision = navigationAction ? { operation: navigationPhase === 'prepare' ? 'write' : 'press', target: navigationAction.id, confidence: 1, complete: 0, text: navigationUrl }
+      : inspectionAction ? { operation: 'press', target: inspectionAction.id, confidence: 1, complete: 0 }
       : resumedTarget && pausedIntent
       ? { ...pausedIntent.decision, target: resumedTarget.id }
       : await decide(goal, snapshot, candidates, history, signal, textValues);
@@ -314,6 +329,7 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
       }
       emit({ state: 'uncertain', message: `macOS did not confirm this action: ${error instanceof Error ? error.message : String(error)}. Stopped without replaying it.` }); return;
     }
+    if (navigationAction && selected.id === navigationAction.id) navigationPhase = navigationPhase === 'prepare' ? 'submit' : 'done';
     if (inspectionAction && selected.id === inspectionAction.id && selected.action.kind === 'backgroundKey') inspectionOpened = true;
     visualRefreshes = 0;
     pendingAction = { candidate: selected, state: fingerprint };
