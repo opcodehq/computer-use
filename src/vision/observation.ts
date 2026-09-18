@@ -51,7 +51,24 @@ export function fuseVisual(snapshot: Snapshot, visual: VisualObservation): Snaps
 }
 export function visualCandidates(snapshot: Snapshot): Candidate[] {
   return snapshot.nodes.filter(n => n.actions.includes('visualClick') && n.enabled && n.visualSource && n.detectionConfidence! >= 0.35)
-    .slice(0, 150).map((n,i) => ({ id: `v${i}`, description: `Visual ${n.visualSource} region: ${n.name || 'unlabeled control'}; detection confidence=${n.detectionConfidence!.toFixed(2)}. Position is known; function and clickability are inferred, not guaranteed.`, action: { kind: 'visualClick', ref: n.ref } }));
+    .slice(0, 150).map((n,i) => {
+      const frame = n.frame;
+      const nearby = frame ? snapshot.nodes.flatMap(other => {
+        const label = (other.name || other.value).trim(), box = other.frame;
+        if (other.ref === n.ref || !box || !label || other.value === '[secure]' ||
+            /^(icon|unlabeled control)$/i.test(label) || !['AXStaticText','AXHeading','VisualText'].includes(other.role)) return [];
+        const dx = frame.x + frame.width/2 - (box.x + box.width/2);
+        const dy = frame.y + frame.height/2 - (box.y + box.height/2);
+        const gapX = Math.max(0, Math.abs(dx) - (frame.width+box.width)/2);
+        const gapY = Math.max(0, Math.abs(dy) - (frame.height+box.height)/2);
+        if (gapX > 180 || gapY > 70) return [];
+        const relation = Math.abs(dy) < Math.max(frame.height,box.height)/2 ? (dx > 0 ? 'right of' : 'left of') : (dy > 0 ? 'below' : 'above');
+        return [{ label: `${relation} ${JSON.stringify(label.slice(0,160))}`, distance: gapX+gapY*2 }];
+      }).sort((a,b)=>a.distance-b.distance) : [];
+      const context = [...new Set(nearby.map(item=>item.label))].slice(0,3).join('; ');
+      const position = frame ? `; screen bounds x=${Math.round(frame.x)}, y=${Math.round(frame.y)}, width=${Math.round(frame.width)}, height=${Math.round(frame.height)}` : '';
+      return { id: `v${i}`, description: `Visual ${n.visualSource} region: ${n.name || 'unlabeled control'}${position}${context ? `; nearby text: ${context}` : ''}; detection confidence=${n.detectionConfidence!.toFixed(2)}. Function and clickability are inferred, not guaranteed.`, action: { kind: 'visualClick' as const, ref: n.ref } };
+    });
 }
 export async function addVisualObservation(snapshot: Snapshot, request: (method: string, args?: Record<string,unknown>) => Promise<unknown>, options: VisualOptions): Promise<{ snapshot: Snapshot; image?: string; imageFrame?: { x: number; y: number; width: number; height: number } }> {
   if (!options.visual) return { snapshot };

@@ -121,3 +121,18 @@ test('Stop during optional perception cannot fall back into another model decisi
   },async()=>{decisions++;return{operation:'done',target:'none',confidence:1,complete:1};},()=>{},controller.signal,undefined,{visual:true}));
   assert.equal(decisions,0);
 });
+
+test('visual icon options retain position and nearby selector text', () => {
+  const state: Snapshot = {...snapshot,nodes:[
+    {ref:'label',role:'AXStaticText',name:'',value:'Primary App ID',enabled:true,actions:[],depth:1,frame:{x:100,y:60,width:120,height:20}},
+    {ref:'selected',role:'AXStaticText',name:'',value:'Selected app',enabled:true,actions:[],depth:1,frame:{x:100,y:90,width:250,height:20}},
+    {ref:'s:visual:clear',role:'VisualControl',name:'icon',value:'',enabled:true,actions:['visualClick'],depth:1,frame:{x:360,y:90,width:20,height:20},visualSource:'yolo',detectionConfidence:.9},
+    {ref:'s:visual:arrow',role:'VisualControl',name:'icon',value:'',enabled:true,actions:['visualClick'],depth:1,frame:{x:400,y:90,width:20,height:20},visualSource:'yolo',detectionConfidence:.9},
+  ]};
+  const choices=visualCandidates(state);
+  assert.equal(choices.length,2);
+  assert.match(choices[1]!.description,/x=400/);
+  assert.match(choices[1]!.description,/right of "Selected app"/);
+  assert.notEqual(choices[0]!.description,choices[1]!.description);
+  assert.equal(choices[1]!.action.ref,'s:visual:arrow');
+});
