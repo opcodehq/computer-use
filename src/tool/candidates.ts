@@ -72,6 +72,13 @@ export function suppliedTextOptions(goal: string, exact?: string): string[] {
   const values = new Set<string>();
   if (exact?.trim()) values.add(exact);
   for (const match of goal.matchAll(/["“]([^"”]+)["”]/g)) values.add(match[1]!);
+  // Long workflows still need exact URLs, domains and reverse-domain IDs.
+  // Copy source spans only: never invent a destination from a product name.
+  for (const match of goal.matchAll(/https?:\/\/[^\s<>"“”]+/g)) {
+    const url = match[0].replace(/[.,;!?\)\]]+$/, '');
+    values.add(url);
+  }
+  for (const match of goal.matchAll(/\b[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+\b/g)) values.add(match[0]);
   for (const match of goal.matchAll(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g)) values.add(match[0]);
   const words = [...goal.matchAll(/[\p{L}\p{N}@._+-]+/gu)].map(m => ({ text: m[0], start: m.index!, end: m.index! + m[0].length }));
   // Bounded phrase enumeration; longer instructions should use the exact-text field.

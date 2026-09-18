@@ -192,9 +192,9 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
       const field = snapshot.nodes.find(node => node.ref === selected!.action.ref);
       // Safari web forms can acknowledge AXValue while ignoring an unfocused write.
       // Focus semantically, then re-observe so no stale ref is used for typing.
-      if (field?.focused === false && field.actions.includes('AXPress')) {
+      if (field?.focused === false && (field.actions.includes('focus') || field.actions.includes('AXPress'))) {
         emit({ state: 'acting', message: `Focusing ${field.name || 'text field'} before entering text.` });
-        try { await call('execute', { snapshotId: snapshot.id, action: { kind: 'press', ref: field.ref }, animate: false }); }
+        try { await call('execute', { snapshotId: snapshot.id, action: { kind: field.actions.includes('focus') ? 'focus' : 'press', ref: field.ref }, animate: false }); }
         catch (error) { emit({ state: 'uncertain', message: `Field focus failed: ${error instanceof Error ? error.message : String(error)}. Observe before retrying.` }); return; }
         history.push(`Requested focus on ${field.name}; verify focus before writing supplied text.`);
         await new Promise(resolve => setTimeout(resolve, 200));

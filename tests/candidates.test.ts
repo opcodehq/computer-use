@@ -1,7 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pressCandidates, textCandidates, navigationCandidates } from '../src/tool/candidates.js';
+import { pressCandidates, textCandidates, navigationCandidates, suppliedTextOptions } from '../src/tool/candidates.js';
 import type { Snapshot } from '../src/shared/contracts.js';
+test('long tasks retain exact unquoted destinations and configuration identifiers', () => {
+  const values = suppliedTextOptions('Configure the existing service and verify every saved field. '.repeat(6) + 'Go to https://developer.apple.com/account/resources/identifiers/list/serviceId, use com.zuse.sh.workos with auth.workos.com and https://auth.workos.com/sso/oauth/apple/ABC/callback.');
+  assert.ok(values.includes('https://developer.apple.com/account/resources/identifiers/list/serviceId'));
+  assert.ok(values.includes('https://auth.workos.com/sso/oauth/apple/ABC/callback'));
+  assert.ok(values.includes('com.zuse.sh.workos'));
+  assert.ok(values.includes('auth.workos.com'));
+  assert.ok(!values.includes('https://zuse.sh'));
+});
 test('unnamed pressable cards carry their own descendant labels and exact refs', () => {
   const node = (ref: string, depth: number, value: string, actions: string[] = []) => ({ ref, depth, value, actions, role: actions.length ? 'AXGroup' : 'AXStaticText', name: '', enabled: true });
   const snapshot: Snapshot = { id: 's', source: 'ax', pid: 1, title: 'App', truncated: false, nodes: [node('s:0', 0, '', ['AXPress']), node('s:1', 1, 'First meeting'), node('s:2', 0, '', ['AXPress']), node('s:3', 1, 'Second meeting')] };

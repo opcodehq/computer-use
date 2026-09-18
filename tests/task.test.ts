@@ -82,6 +82,16 @@ test('task focuses an unfocused web field and uses a fresh ref for its write', a
   assert.deepEqual(actions, [{ kind: 'press', ref: 's0:0' }, { kind: 'setValue', ref: 's1:0', text: 'Zuse' }]);
 });
 
+test('task focuses Safari address field without AXPress and uses a fresh ref for its write', async () => {
+  const actions: unknown[] = []; let count = 0;
+  await runDesktopGoal('Navigate to "https://developer.apple.com"', 'Safari', async (method, args) => {
+    if (method === 'apps') return [{ pid: 42, name: 'Safari' }];
+    if (method === 'snapshot') return { id: `s${count}`, source: 'ax', pid: 42, title: 'Form', truncated: false, nodes: [{ ref: `s${count}:0`, role: 'AXTextField', name: 'smart search field', value: count === 2 ? 'https://developer.apple.com' : '', focused: count > 0, enabled: true, depth: 1, actions: ['focus','setValue'] }] };
+    actions.push(args?.action); count++; return {};
+  }, async () => count === 2 ? { operation: 'done', target: 'none', confidence: 1, complete: 1 } : { operation: 'write', target: 't0', text: 'https://developer.apple.com', confidence: 1, complete: 0 }, () => {}, new AbortController().signal);
+  assert.deepEqual(actions, [{ kind: 'focus', ref: 's0:0' }, { kind: 'setValue', ref: 's1:0', text: 'https://developer.apple.com' }]);
+});
+
 test('task waits through server processing without repeating a submission', async () => {
   let observations = 0, decisions = 0, actions = 0;
   await runDesktopGoal('Register item', 'Safari', async method => {
