@@ -52,7 +52,8 @@ test('visual task verifies fresh state after dispatch; no screenshot is passed t
     return{};
   },async(_goal,state,candidates)=>{
     assert.equal('image' in state,false);
-    assert.ok(candidates.some(c=>c.action.kind==='visualClick'));
+    if (count === 0) assert.ok(candidates.some(c=>c.action.kind==='visualClick'));
+    else assert.ok(!candidates.some(c=>c.action.kind==='visualClick')); // unchanged target is not offered for replay
     return ++count===1?{operation:'press',target:'v0',confidence:1,complete:0}:{operation:'done',target:'none',confidence:1,complete:1};
   },e=>events.push(e),new AbortController().signal,undefined,{visual:true});
   assert.deepEqual(calls,['apps','snapshot','detect','execute','snapshot','detect']);

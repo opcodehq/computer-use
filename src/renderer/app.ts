@@ -50,9 +50,9 @@ function onEvent(event: DesktopEvent) {
   preview.update(event);
   const previewStop = element<HTMLButtonElement>('preview-stop');
   previewStop.hidden = !isPopout;
-  if (['starting','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) previewStop.disabled = false;
+  if (['starting','waiting','recovering','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) previewStop.disabled = false;
   if (['failed','stopped','succeeded','blocked','uncertain','completed'].includes(event.state)) previewStop.disabled = true;
-  if (['starting','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) { start.disabled = true; stop.disabled = false; target.disabled = true; mode.disabled = true; }
+  if (['starting','waiting','recovering','refreshing','selecting','acting','observing','deciding','verifying','approval'].includes(event.state)) { start.disabled = true; stop.disabled = false; target.disabled = true; mode.disabled = true; }
   element('state').textContent = event.state;
   element('state').dataset.active = String(['selecting', 'acting', 'observing'].includes(event.state));
   timeline.querySelector('.empty')?.remove();

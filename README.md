@@ -122,6 +122,28 @@ choose an exact observed action instead of ending the whole task.
 
 The Electron app (`bun run desktop`) defaults to Jev task mode: exact named-app launch requests use an installed-app catalog; other tasks run semantic presses without a fixed step cap with fresh observations and Jev completion judgments. TypeSafe is the only model credential for this mode. It can fill observed writable fields using exact text you provide or phrases copied from your task, then inspect recipient/search suggestions. It stops on uncertainty or unsupported steps; generated prose and general cross-app planning remain the host coding agent’s job. Supported focused-control keyboard navigation is available. The older desktop/browser planner modes still require Claude. CLI/MCP `act` remains one bounded action for the host coding agent to compose.
 
+
+Submit a complete workflow in one `task` invocation. The runner keeps the original
+goal and progress in memory, excludes ineffective actions in unchanged states,
+and selects action and target together. Direct controls are considered before
+keyboard alternatives. If foreground activity prevents dispatch, the same run
+waits and resumes from fresh refs when you leave the target app; Stop cancels it.
+Unknown delivery still stops rather than replaying an action. Recovery and
+completion use separate evidence judgments; unresolved uncertainty can still
+block a task. Progress is not restored after a process restart.
+
+A real native workflow acceptance creates a disposable project, fills its callback,
+reviews, saves, reopens, and independently checks the persisted result. Run on Mac
+with the saved TypeSafe key and Accessibility enabled:
+
+```sh
+node scripts/mac-workflow-session.mjs 'Cedar Sandbox' 'https://sandbox.example.test/login/return'
+```
+
+The test uses one task invocation, no host actions during execution, and no
+screenshots. Its 120-second test timeout is not a product step cap. This fixture
+does not establish arbitrary website or cross-app workflow reliability.
+
 ## Development
 
 ```sh

@@ -229,3 +229,35 @@ Final picker QA passed after the Mac screenshot exposed a misleading default:
 the picker now starts at “Choose an application,” follows the actual running
 snapshot's app, locks app/mode during a task, and unlocks them on completion.
 The mocked renderer check verified all four behaviors with no page errors.
+
+
+## Whole native workflow: 2026-09-18
+
+Changed the runner to select action and receiver together, consider semantic
+controls before keyboard alternatives, retain ineffective-action evidence, and
+wait/resume inside the same invocation after a foreground refusal known to have
+sent no input. Fresh snapshot refs are mandatory on resumption. Unknown delivery
+is never replayed. Added cancellation and unchanged-state recovery coverage.
+
+Ambiguous choices between 0.20 and 0.60 can now proceed with a separate evidence
+judgment: 0.90 for presses, 0.80 for exact supplied writes (whose value choice must
+also meet 0.80). Navigation preparation retains a 0.60 support gate. These are
+provisional thresholds, not calibrated reliability claims. Completion either
+meets the existing 0.90 choice/evidence pair or a done choice >=0.60 plus a focused
+final-screen audit >=0.90. Completion judgments never authorize input.
+
+Early real fixture runs exposed action ambiguity and premature completion blocks;
+those failures drove the semantic-first selection and focused completion audit.
+The final runner completed two full Mac workflows with different names and URLs:
+
+- Orchid QA: 9,094 ms; one invocation, one save, saved details reopened and verified.
+- Cedar Sandbox: 9,582 ms; one invocation, one save, saved details reopened and verified.
+- Both: zero host actions during the task and zero screenshots.
+- Independent fixture JSON matched both exact inputs and `reopened: true`.
+
+Replay with `scripts/mac-workflow-session.mjs`; local evidence is written under
+`.context/workflow/`. The fixture has five screens and does not require capture.
+This verifies native form progression, not Safari custom dropdowns, download file
+verification, or arbitrary cross-app planning. Apple/WorkOS setup remains unfinished.
+In-run progress memory is not durable checkpointing. Separate desktop isolation
+remains unimplemented.

@@ -19,7 +19,9 @@ export function decisionState(goal: string, snapshot: Snapshot, candidates: Cand
       return text ? [{ role: node.role, text }] : [];
     }),
     controls: candidates.map(candidate => ({ id: candidate.id, operation: ['setValue','insertText'].includes(candidate.action.kind) ? 'write' : candidate.action.kind, description: candidate.description.replace(/; ref=[^;]+/, '') })),
-    history: history.slice(-20),
+    history: history.slice(-30),
+    recoveryMemory: history.filter(entry => entry.startsWith('INEFFECTIVE:')),
+    workflowRule: 'Keep the original goal throughout this run. Verify each requested outcome, preserve completed work, and recover using a different supported action when the last route was ineffective.',
     currentTime: new Date().toISOString(),
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
