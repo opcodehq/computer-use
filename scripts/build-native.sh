@@ -16,7 +16,7 @@ xcrun swiftc -swift-version 5 -parse-as-library -O \
 echo "Built $cu_native_output/desktop-driver"
 
 xcrun swiftc -swift-version 5 -parse-as-library -O -framework AppKit \
-  native/macos/TaskPreview.swift native/macos/Glass.swift -o "$cu_native_output/task-preview"
+  native/macos/TaskPreview.swift native/macos/Glass.swift native/macos/Brand.swift -o "$cu_native_output/task-preview"
 echo "Built $cu_native_output/task-preview"
 
 xcrun swiftc -swift-version 5 -parse-as-library -O -D CU_HELPER \
@@ -29,6 +29,6 @@ xcrun swiftc -swift-version 5 -parse-as-library -O -framework AppKit \
 echo "Built $cu_native_output/permission-guide"
 
 xcrun swiftc -swift-version 5 -parse-as-library -O -framework AppKit \
-  native/macos/BrandIcon.swift -o "$cu_native_output/brand-icon"
+  native/macos/BrandIcon.swift native/macos/Brand.swift -o "$cu_native_output/brand-icon"
 "$cu_native_output/brand-icon" "$cu_native_output/Opcode.iconset"
 iconutil -c icns "$cu_native_output/Opcode.iconset" -o "$cu_native_output/Opcode.icns"

@@ -1,9 +1,9 @@
 # CLI computer preview
 
 On macOS, captured frames appear in a borderless floating panel: the image inside a
-thin glass rim, crossfading between frames. Hover reveals two glass capsules, an
-Opcode pill with a live dot and a × cancel button. On macOS 26 these use native
-Liquid Glass; earlier systems use a HUD material.
+thin glass rim, crossfading between frames. Hover reveals two glass capsules: the
+Opcode mark and name, whose dot pulses while it acts, and a × cancel button. On
+macOS 26 these use native Liquid Glass; earlier systems use a HUD material.
 The button cancels in-flight input, pauses the session, and hides the panel.
 There is no system title bar, status text, Accessibility wireframe, or action overlay. Drag the image to move the panel. It follows the image's aspect
 ratio and stays visible across Spaces without activating the controlled app.
@@ -40,7 +40,8 @@ Settings quits. The ‹ button reopens the pane. The arrow cue respects Reduce M
 permission status comes from the helper, not the guide process.
 If macOS requests a restart, finish active sessions and run `cu helper-restart`.
 
-Opcode uses a monochrome “op” app mark. Its existing bundle ID and on-disk helper
+Opcode's mark is a rounded screen with the agent as a dot (`docs/brand/opcode-mark.svg`);
+the app icon is that mark in white on a graphite tile. Its existing bundle ID and on-disk helper
 path remain stable; the display name in the new bundle is Opcode. macOS may cache
 the previous name until the helper restarts. Production signing requirements remain
 unchanged.

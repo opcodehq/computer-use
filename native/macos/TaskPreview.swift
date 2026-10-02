@@ -54,7 +54,7 @@ final class PreviewDelegate: NSObject, NSApplicationDelegate {
     var panel: NSPanel!
     let canvas = PreviewCanvas()
     let controls = NSView()
-    let liveDot = NSView()
+    let mark = OpcodeMarkView()
     var snapshotID: String?
     var cancelled = false
 
@@ -78,16 +78,13 @@ final class PreviewDelegate: NSObject, NSApplicationDelegate {
     func brandPill() -> NSView {
         let row = NSStackView()
         row.orientation = .horizontal; row.spacing = 7; row.alignment = .centerY
-        row.edgeInsets = NSEdgeInsets(top: 0, left: 11, bottom: 0, right: 12)
-        liveDot.wantsLayer = true
-        liveDot.layer?.cornerRadius = 3.5
-        liveDot.layer?.backgroundColor = NSColor.systemGreen.cgColor
-        liveDot.widthAnchor.constraint(equalToConstant: 7).isActive = true
-        liveDot.heightAnchor.constraint(equalToConstant: 7).isActive = true
+        row.edgeInsets = NSEdgeInsets(top: 0, left: 9, bottom: 0, right: 12)
+        mark.widthAnchor.constraint(equalToConstant: 17).isActive = true
+        mark.heightAnchor.constraint(equalToConstant: 17).isActive = true
         let label = NSTextField(labelWithString: "Opcode")
         label.font = .systemFont(ofSize: 12, weight: .semibold)
         label.textColor = .labelColor
-        row.addArrangedSubview(liveDot); row.addArrangedSubview(label)
+        row.addArrangedSubview(mark); row.addArrangedSubview(label)
         row.setAccessibilityElement(true)
         row.setAccessibilityLabel("Opcode is using your computer")
         return glassSurface(row, cornerRadius: 15)
@@ -105,14 +102,6 @@ final class PreviewDelegate: NSObject, NSApplicationDelegate {
         return glassSurface(button, cornerRadius: 15)
     }
 
-    func pulseLiveDot() {
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, let layer = liveDot.layer else { return }
-        let pulse = CABasicAnimation(keyPath: "opacity")
-        pulse.fromValue = 1; pulse.toValue = 0.35; pulse.duration = 0.9
-        pulse.autoreverses = true; pulse.repeatCount = .infinity
-        pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        layer.add(pulse, forKey: "live")
-    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let screen = NSScreen.main?.visibleFrame ?? NSRect(x:0,y:0,width:1280,height:800)
@@ -157,7 +146,7 @@ final class PreviewDelegate: NSObject, NSApplicationDelegate {
             cancel.widthAnchor.constraint(equalToConstant: 30)
         ])
         canvas.hover = { [weak self] visible in self?.showControls(visible) }
-        pulseLiveDot()
+        mark.pulse()
 
         // No placeholder or Accessibility wireframe: only show actual captured pixels.
         DispatchQueue.global(qos:.utility).async { [weak self] in
