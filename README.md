@@ -47,7 +47,7 @@ cu doctor
 
 The npm package requires Node.js 20+ and Bun 1.3.10+. `cu install` builds the
 native runtime in your user cache: macOS requires Xcode Command Line Tools;
-Linux requires a C compiler, X11/XTest development headers, and Xvfb. On Mac, setup installs the Opcode CU Driver helper app as the permission owner. It does
+Linux requires a C compiler, X11/XTest development headers, and Xvfb. On Mac, setup installs the Opcode helper app as the permission owner. It does
 not run sudo or modify system packages. On both platforms it downloads a
 checksum-verified UI detection model; see [Linux setup](docs/LINUX_CLOUD.md)
 for system packages and model terms. Chrome/Chromium is required for browser tools.

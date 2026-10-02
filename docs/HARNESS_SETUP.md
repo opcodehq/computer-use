@@ -75,7 +75,7 @@ No separate model, key, agent process or provider picker is needed.
 location, `cu skill generic --dir PATH` installs the same instructions and
 references there, preserving unrelated existing skills.
 
-Mac driver sessions include a local preview. Stop pauses input; observations
+Mac driver sessions include a local preview. The hover bar’s × pauses input; observations
 remain available. Resume only after the user asks, then observe before acting.
 Closing the preview hides it without stopping input. Use `--no-preview` on the
 first helper request or the persistent MCP command for quiet operation.
