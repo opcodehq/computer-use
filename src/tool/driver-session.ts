@@ -5,7 +5,7 @@ import { SnapshotSchema, type Event } from '../shared/contracts.js';
 type Preview = { send(event: Event): void; close(): Promise<void> };
 type Call = (method: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>;
 const writes = new Set(['execute', 'type', 'key', 'click', 'act', 'launch', 'input', 'pointer']);
-const visible = new Set(['observe', 'capture', 'wait', ...writes]);
+const visible = new Set(['inspect', 'observe', 'capture', 'wait', ...writes]);
 
 /** One host-agent session owns input, refs and its display-only preview. */
 export class DriverSession {
@@ -45,7 +45,7 @@ export class DriverSession {
       const combined = AbortSignal.any([...(signal ? [signal] : []), ...(!this.paused ? [this.controller.signal] : [])]);
       combined.throwIfAborted();
       const result = await this.invoke(method, args, combined);
-      if (method === 'browser' && ['observe','capture'].includes(String(args.operation))) this.needsObservation = false;
+      if ((method === 'inspect' && (args.pageId || args.route === 'browser')) || (method === 'browser' && ['observe','capture'].includes(String(args.operation)))) this.needsObservation = false;
       if (result && typeof result === 'object') {
         const data = result as { snapshot?: unknown; image?: { base64?: string } };
         const snapshot = Schema.is(SnapshotSchema)(result) ? result : Schema.is(SnapshotSchema)(data.snapshot) ? data.snapshot : undefined;

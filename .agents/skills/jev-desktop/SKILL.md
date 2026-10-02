@@ -89,3 +89,8 @@ browser tabs, frames, dialogs, uploads/downloads, native gestures, and live view
 Browser observations and native observations have different refs; keep actions
 on the same route that produced their targets. On Linux, use an isolated desktop
 for keyboard and pointer input. Background native keyboard delivery is unsupported.
+
+For sparse page content or screenshot/model setup, read
+[observation routes](references/observation-routes.md). Use `inspect` to choose
+Accessibility/local vision, or pass an exact connected browser `pageId` for DOM.
+Native capture permission and browser debugging access are different capabilities.

@@ -1,0 +1,15 @@
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { writeFile, mkdir } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import sharp from 'sharp';
+if(process.platform!=='darwin')throw new Error('macOS required');
+const native=process.env.CU_NATIVE_DIR;if(!native)throw new Error('Set CU_NATIVE_DIR to the installed runtime');
+await mkdir('.context',{recursive:true});
+const path=join(process.cwd(),'.context/helper-fixture.png');
+await writeFile(path,await sharp(Buffer.from('<svg width="640" height="400"><rect width="640" height="400" fill="white"/><text x="40" y="90" font-size="32" fill="black">Pending requests</text></svg>')).png().toBuffer());
+const call=body=>{const p=spawnSync(join(native,'desktop-driver'),[],{input:JSON.stringify({id:'fixture',...body})+'\n',encoding:'utf8',timeout:120000,maxBuffer:9000000});assert.equal(p.status,0,p.stderr);const r=JSON.parse(p.stdout);assert.equal(r.ok,true,JSON.stringify(r.error));return r.data;};
+const status=call({method:'status'});assert.equal(status.permissionOwner,'Opcode CU Driver');assert.equal(status.visual.modelInstalled,true);
+const observation=call({method:'detectImage',imagePath:path});assert.equal(observation.model,'ui-detector.onnx',observation.warning);assert(observation.regions.some(r=>/request/i.test(r.label)));
+console.log('PASS LaunchServices helper, permission owner and image perception without desktop grants');

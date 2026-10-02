@@ -48,6 +48,7 @@ export class LinuxVision {
     const meta = await sharp(png).metadata();
     const width = meta.width!,
       height = meta.height!;
+    if (!width || !height || width * height > 24_000_000) throw new Error('Image must contain 1–24 million pixels.');
     if (!this.session || this.model !== modelPath) {
       await this.session?.release();
       this.session = await InferenceSession.create(modelPath, {

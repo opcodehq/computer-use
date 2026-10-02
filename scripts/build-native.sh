@@ -18,3 +18,8 @@ echo "Built $cu_native_output/desktop-driver"
 xcrun swiftc -swift-version 5 -parse-as-library -O -framework AppKit \
   native/macos/TaskPreview.swift -o "$cu_native_output/task-preview"
 echo "Built $cu_native_output/task-preview"
+
+xcrun swiftc -swift-version 5 -parse-as-library -O -D CU_HELPER \
+  -framework AppKit -framework ApplicationServices -framework ScreenCaptureKit -framework Vision -framework CoreML -framework CryptoKit \
+  native/macos/Driver.swift native/macos/BackgroundInput.swift native/macos/VisualDetector.swift native/macos/Helper.swift -o "$cu_native_output/cu-helper"
+echo "Built $cu_native_output/cu-helper"

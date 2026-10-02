@@ -20,18 +20,50 @@ final class VisualDetector {
     private var cachedModel: VNCoreMLModel?
     private var compiledURL: URL?
     deinit { if let compiledURL { try? FileManager.default.removeItem(at: compiledURL) } }
+    static var workerConfig: [String: String]? {
+        guard let url = Bundle.main.url(forResource: "vision", withExtension: "json"), let data = try? Data(contentsOf: url) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: String]
+    }
     static var defaultModelPath: String {
-        ProcessInfo.processInfo.environment["JEV_YOLO_MODEL_PATH"] ??
+        ProcessInfo.processInfo.environment["JEV_YOLO_MODEL_PATH"] ?? Self.workerConfig?["model"] ??
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/jev-desktop/models/ui-detector.mlpackage").path
     }
-    func analyze(_ image: CGImage, modelPath: String?, threshold: Float = 0.35) throws -> (regions: [VisualRegion], model: String, warning: String?) {
+    func analyze(_ image: CGImage, modelPath: String?, threshold: Float = 0.35) async throws -> (regions: [VisualRegion], model: String, warning: String?) {
         guard image.width > 0, image.height > 0, image.width * image.height <= 24_000_000 else {
             throw DriverFailure(code: "InvalidImage", message: "Image must contain at most 24 million pixels.")
         }
         let path = modelPath ?? Self.defaultModelPath
         var warning: String?
         var detector: VNCoreMLRequest?
-        if FileManager.default.fileExists(atPath: path) {
+        if path.hasSuffix(".onnx"), let config = Self.workerConfig, let runtime = config["runtime"], let script = config["script"],
+           let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+            do {
+                let data = try await Task.detached { () throws -> Data in
+                    let process = Process(), input = Pipe(), output = Pipe()
+                    process.executableURL = URL(fileURLWithPath: runtime)
+                    process.arguments = [script, path]
+                    process.standardInput = input; process.standardOutput = output; process.standardError = FileHandle.nullDevice
+                    try process.run()
+                    let timeout = DispatchWorkItem { if process.isRunning { process.terminate() } }
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: timeout)
+                    defer { timeout.cancel() }
+                    input.fileHandleForWriting.write(png); try? input.fileHandleForWriting.close()
+                    let data = output.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    guard process.terminationStatus == 0, data.count <= 2_000_000 else { throw DriverFailure(code: "VisionUnavailable", message: "Local ONNX perception failed or timed out.") }
+                    return data
+                }.value
+                guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any], let raw = decoded["regions"] as? [[String: Any]] else { throw DriverFailure(code: "VisionUnavailable", message: "Invalid local model result.") }
+                let regions = raw.prefix(500).compactMap { item -> VisualRegion? in
+                    guard let label = item["label"] as? String, let confidence = item["confidence"] as? Double, confidence.isFinite, confidence >= Double(threshold), confidence <= 1,
+                          let source = item["source"] as? String, ["yolo", "ocr"].contains(source), let bounds = item["bounds"] as? [String: Double],
+                          let x = bounds["x"], let y = bounds["y"], let width = bounds["width"], let height = bounds["height"],
+                          [x,y,width,height].allSatisfy({ $0.isFinite }), x >= 0, y >= 0, width > 0, height > 0, x+width <= Double(image.width)+1, y+height <= Double(image.height)+1 else { return nil }
+                    return VisualRegion(label: String(label.prefix(1000)), confidence: Float(confidence), source: source, bounds: CGRect(x: x, y: y, width: width, height: height))
+                }
+                return (regions, "ui-detector.onnx", nil)
+            } catch { warning = "Local ONNX perception failed. Apple OCR remains available: \(error.localizedDescription)" }
+        } else if FileManager.default.fileExists(atPath: path) {
             do {
                 if cachedPath != path || cachedModel == nil {
                     let url = URL(fileURLWithPath: path)

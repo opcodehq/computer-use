@@ -1,3 +1,4 @@
+import { inspectSurface } from './inspect.js';
 import { BrowserTools, browserOperations } from '../browser/tools.js';
 import { DesktopViewer } from '../viewer/server.js';
 import { captureWindow } from '../linux/capture.js';
@@ -31,7 +32,10 @@ import { createDesktopTool } from './service.js';
 const help = `cu — @opcodehq/cu native computer driver for your existing agent (jev alias supported)
 
 Your agent plans and calls these tools using its existing login. No CU model key needed.
+  inspect --input-json JSON     Auto-select native AX/vision or an explicitly bound browser page
   cu install                    npm distribution: build native runtime in user cache
+  capture-permission            Request capture access for the Mac helper
+  helper-restart                Stop the Mac helper; next call starts it again
   cu desktop -- COMMAND [ARGS]   npm distribution: start an isolated Linux display
 
   update                        Download and verify the latest published Mac bundle
@@ -221,6 +225,7 @@ const browser = new BrowserTools({ headless: process.platform === 'darwin', ...(
 browser.activity=(message,pointer)=>viewer?.activity(message,pointer);
 const { tool: nativeTool, close: closeNative } = createDesktopTool(binary, event => { if(event.snapshot) target=event.snapshot; tool.event(event); });
 const tool: DriverSession = new DriverSession(async(method,args,signal): Promise<unknown>=>{
+  if(method==='inspect') { browserView=Boolean(args.pageId)||args.route==='browser'; return inspectSurface((m,a,s)=>nativeTool.call(m,a,s),(_m,a,s)=>browser.call(a,s),args,signal); }
   if(method==='browser') { browserView=true; return browser.call(args,signal); }
   if(method==='viewer') {
     if(args.app){browserView=false;target=await nativeTool.call('observe',args,signal) as Snapshot;}
@@ -283,8 +288,9 @@ if (command === '_serve') {
   const verification = { visual: { type: 'boolean' }, modelPath: { type: 'string' }, overlay: { type: 'boolean' }, expectedOutput: { type: 'string', minLength: 1, maxLength: 4000, description: 'Optional exact output line to check in non-editable AXStaticText after dispatch. Readback is separate from delivery; alreadyPresent means no causal proof.' } };
   const app = { type: 'string', description: 'Exact running app name or PID.' };
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
+    { name: 'desktop_inspect', description: 'Automatically inspect an exact attached browser page or a native app. Sparse native Accessibility falls back to local OCR and visual detection. Returns the chosen route and actionable next steps when capture permission is missing. Never guesses a tab from an app name.', inputSchema: {type:'object',properties:{app,pageId:{type:'string'},frameId:{type:'string'},windowId:{type:'integer'},route:{enum:['auto','ax','vision','browser']},query:{type:'string'},modelPath:{type:'string'}},additionalProperties:false} },
     { name: 'desktop_pointer', description: 'Double-click, right-click, hover or drag between fresh observed refs. Mac uses app-directed background events; Linux uses its isolated display. Returns fresh observation. Mac compatibility remains app-dependent.', inputSchema: {type:'object',properties:{app,snapshotId:{type:'string'},ref:{type:'string'},targetRef:{type:'string'},gesture:{enum:['doubleClick','rightClick','hover','drag']}},required:['app','snapshotId','ref','gesture'],additionalProperties:false} },
-    { name: 'desktop_browser', description: 'Operate the session-owned browser without desktop pointer/focus changes. Open first, then list tabs and frames. Observe returns page/frame-bound refs and snapshotId. Handles dialogs, file inputs and downloads. No attachment to unrelated profiles. Mutations require checking the resulting page.', inputSchema: { type: 'object', properties: { operation: { enum: browserOperations }, pageId: {type:'string'}, frameId:{type:'string'}, snapshotId:{type:'string'}, ref:{type:'string'}, targetRef:{type:'string'}, url:{type:'string'}, text:{type:'string'}, key:{type:'string'}, amount:{type:'number'}, value:{type:'string'}, paths:{type:'array',items:{type:'string'}}, dialogId:{type:'string'}, accept:{type:'boolean'}, downloadId:{type:'string'}, outputPath:{type:'string'} },required:['operation'],additionalProperties:false } },
+    { name: 'desktop_browser', description: 'Operate the session-owned browser without desktop pointer/focus changes. Open first, then list tabs and frames. Observe returns page/frame-bound refs and snapshotId. Handles dialogs, file inputs and downloads. attach connects an explicit local CDP endpoint; select the exact returned pageId. detach preserves existing tabs and the external browser. Mutations require checking the resulting page.', inputSchema: { type: 'object', properties: { endpoint:{type:'string'}, operation: { enum: browserOperations }, pageId: {type:'string'}, frameId:{type:'string'}, snapshotId:{type:'string'}, ref:{type:'string'}, targetRef:{type:'string'}, url:{type:'string'}, text:{type:'string'}, key:{type:'string'}, amount:{type:'number'}, value:{type:'string'}, paths:{type:'array',items:{type:'string'}}, dialogId:{type:'string'}, accept:{type:'boolean'}, downloadId:{type:'string'}, outputPath:{type:'string'} },required:['operation'],additionalProperties:false } },
     { name: 'desktop_viewer', description: 'Start a live viewer for the session browser or selected Linux app. Returns a private control link and a separate read-only sharing link. Keep this session alive. Viewer takeover pauses agent writes.', inputSchema: { type:'object',properties:{app,windowId:{type:'integer'}},additionalProperties:false } },
     { name: 'desktop_input', description: 'Input in an isolated Linux desktop using the latest screenshot. Coordinates are local to the captured window. Returns fresh state; verify the outcome.', inputSchema: { type: 'object', properties: { app, snapshotId: { type: 'string' }, action: { type: 'object', properties: { kind: { enum: ['click','doubleClick','rightClick','hover','drag','type','key','scroll'] }, x: { type: 'number' }, y: { type: 'number' }, toX: { type: 'number' }, toY: { type: 'number' }, delivery: { enum: ['isolated','background'] }, text: { type: 'string' }, amount: { type: 'integer' } }, required: ['kind'], additionalProperties: false } }, required: ['app','snapshotId','action'], additionalProperties: false } },
     { name: 'desktop_pause', description: 'Cancel current input and pause this connection. Observations remain available.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
@@ -305,8 +311,12 @@ if (command === '_serve') {
   ] }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     try {
-      if (!['desktop_pointer', 'desktop_browser', 'desktop_viewer', 'desktop_pause', 'desktop_resume', 'desktop_input', 'desktop_capture', 'desktop_status', 'desktop_apps', 'desktop_installed_apps', 'desktop_launch', 'desktop_observe', 'desktop_act', 'desktop_execute', 'desktop_key', 'desktop_click', 'desktop_type', 'desktop_windows', 'desktop_wait'].includes(request.params.name)) throw new Error('Unknown tool');
+      if (!['desktop_inspect', 'desktop_pointer', 'desktop_browser', 'desktop_viewer', 'desktop_pause', 'desktop_resume', 'desktop_input', 'desktop_capture', 'desktop_status', 'desktop_apps', 'desktop_installed_apps', 'desktop_launch', 'desktop_observe', 'desktop_act', 'desktop_execute', 'desktop_key', 'desktop_click', 'desktop_type', 'desktop_windows', 'desktop_wait'].includes(request.params.name)) throw new Error('Unknown tool');
       const result = await tool.call(request.params.name.slice(8), request.params.arguments ?? {}, extra.signal);
+      if (request.params.name === 'desktop_inspect' && result && typeof result === 'object' && 'image' in result) {
+        const { image, ...observation } = result as { image: {base64:string}; [key:string]:unknown };
+        return { content: [{type:'text',text:JSON.stringify(observation)}, {type:'image',data:image.base64,mimeType:'image/png'}] };
+      }
       if ((request.params.name === 'desktop_capture' && !request.params.arguments?.outputPath) || (request.params.name === 'desktop_browser' && request.params.arguments?.operation === 'capture')) {
         const capture = Schema.decodeUnknownSync(Schema.Struct({ snapshot: Schema.optional(Schema.Unknown), image: Schema.Struct({ base64: Schema.String }) }))(result);
         return { content: [{ type: 'text', text: JSON.stringify(capture.snapshot ?? { kind: 'browserCapture' }) }, { type: 'image', data: capture.image.base64, mimeType: 'image/png' }] };

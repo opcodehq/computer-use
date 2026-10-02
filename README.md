@@ -47,8 +47,8 @@ cu doctor
 
 The npm package requires Node.js 20+ and Bun 1.3.10+. `cu install` builds the
 native runtime in your user cache: macOS requires Xcode Command Line Tools;
-Linux requires a C compiler, X11/XTest development headers, and Xvfb. It does
-not run sudo or modify system packages. On Linux it also downloads a
+Linux requires a C compiler, X11/XTest development headers, and Xvfb. On Mac, setup installs the Opcode CU Driver helper app as the permission owner. It does
+not run sudo or modify system packages. On both platforms it downloads a
 checksum-verified UI detection model; see [Linux setup](docs/LINUX_CLOUD.md)
 for system packages and model terms. Chrome/Chromium is required for browser tools.
 
@@ -197,3 +197,13 @@ See [Linux cloud setup and the real desktop smoke test](docs/LINUX_CLOUD.md).
 Use `cu pointer` for ref-based gestures, `cu browser` for session-owned tabs, frames,
 dialogs and file transfers, and `cu viewer` for a live stream with read-only sharing
 and takeover. See [commands and platform limits](docs/WORKSPACE_TOOLS.md).
+
+## Read beyond Accessibility
+
+`cu inspect` selects native Accessibility or local vision; an explicit `pageId`
+selects browser DOM. `cu browser` can attach a local CDP endpoint to read an
+existing tab without native Screen Recording. The npm CLI runs on Node; Bun
+remains the package manager and native setup runtime.
+
+See [observation routes and Mac helper setup](docs/OBSERVATION_ROUTES.md) for
+attachment, model installation, permission ownership, and platform limits.

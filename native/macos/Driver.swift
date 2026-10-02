@@ -518,7 +518,7 @@ struct SavedElement {
         }
         let threshold = request["threshold"] as? Double ?? 0.35
         guard threshold.isFinite && threshold >= 0.1 && threshold <= 1 else { throw DriverFailure(code: "InvalidRequest", message: "Detection threshold must be 0.1–1.") }
-        let output = try visualDetector.analyze(image, modelPath: request["modelPath"] as? String, threshold: Float(threshold))
+        let output = try await visualDetector.analyze(image, modelPath: request["modelPath"] as? String, threshold: Float(threshold))
         let prefix = fromFile ? "image-\(UUID().uuidString)" : generation
         let captureID = UUID().uuidString
         var regions: [[String: Any]] = []
@@ -669,6 +669,7 @@ struct SavedElement {
     }
 }
 
+#if !CU_HELPER
 @main struct Main {
     @MainActor static func main() async {
         let driver = Driver()
@@ -694,3 +695,5 @@ struct SavedElement {
         }
     }
 }
+
+#endif

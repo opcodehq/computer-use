@@ -1,0 +1,11 @@
+import sharp from 'sharp';
+import { spawnSync } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
+const png=await sharp(Buffer.from('<svg width="640" height="400"><rect width="640" height="400" fill="white"/><text x="50" y="90" font-size="32" fill="black">Pending requests</text><rect x="40" y="150" width="220" height="70" fill="#ddd"/><text x="65" y="195" font-size="26" fill="black">Open request</text></svg>')).png().toBuffer();
+const result=spawnSync('node',['dist/vision-worker.mjs',process.env.CU_TEST_MODEL??resolve('.models/ui-detector.onnx')],{input:png,maxBuffer:2_000_000,timeout:90000});
+assert.equal(result.status,0,result.stderr?.toString());
+const data=JSON.parse(result.stdout.toString());assert.equal(data.width,640);assert.equal(data.height,400);
+assert(data.regions.some(r=>r.source==='ocr'&&/request/i.test(r.label)));
+assert(data.regions.some(r=>r.source==='yolo'));
+console.log('PASS local ONNX detector and OCR worker');

@@ -11,3 +11,4 @@ for (const name of ['BarlowCondensed-Medium.ttf', 'OFL.txt']) await copyFile(`sr
 
 await build({ entryPoints: ['src/tool/cli.ts'], outfile: 'dist/cli.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external', banner: { js: '#!/usr/bin/env bun' } });
 await chmod('dist/cli.mjs', 0o755);
+for (const name of ['helper-proxy', 'vision-worker']) await build({ entryPoints: [`src/macos/${name}.ts`], outfile: `dist/${name}.mjs`, bundle: true, platform: 'node', format: 'esm', packages: 'external' });

@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { compiled } from "../tool/runtime.js";
 import {
   type BrowserContext,
+  type Browser,
   type Page,
   type Frame,
   type ElementHandle,
@@ -32,6 +33,8 @@ type Binding = {
 };
 const operations = [
   "open",
+  "attach",
+  "detach",
   "tabs",
   "newTab",
   "closeTab",
@@ -80,9 +83,12 @@ function url(value: string) {
   return parsed.href;
 }
 
-/** A private context owns every page/frame/ref. Never attaches to an unrelated logged-in browser. */
+/** Bind refs to exact pages in an owned context or explicitly connected local browser. */
 export class BrowserTools {
   private context?: BrowserContext;
+  private attached?: Browser;
+  private pageListener?: (page: Page) => void;
+  private listeners: Array<() => void> = [];
   private pages = new Map<string, Page>();
   private frames = new Map<string, Frame>();
   private refs = new Map<string, Binding>();
@@ -112,22 +118,23 @@ export class BrowserTools {
     const id = randomUUID();
     this.pages.set(id, page);
     this.active ??= page;
-    page.setDefaultTimeout(5000);
-    page.on("close", () => {
+    if (!this.attached) page.setDefaultTimeout(5000);
+    const onClose = () => {
       this.pages.delete(id);
       if (this.active === page) this.active = [...this.pages.values()][0];
       this.invalidate();
-    });
-    page.on("framenavigated", () => {
+    };
+    const onNavigate = () => {
       if (this.observedPage === page) this.invalidate();
-    });
-    page.on("dialog", (dialog) => {
+    };
+    const onDialog = (dialog: Dialog) => {
       this.dialogs.set(randomUUID(), { page, dialog });
       this.dialogWake?.();
-    });
-    page.on("download", (download) =>
-      this.downloads.set(randomUUID(), { page, download }),
-    );
+    };
+    const onDownload = (download: Download) => { this.downloads.set(randomUUID(), { page, download }); };
+    page.on("close", onClose); page.on("framenavigated", onNavigate);
+    page.on("dialog", onDialog); page.on("download", onDownload);
+    this.listeners.push(() => { page.off("close", onClose); page.off("framenavigated", onNavigate); page.off("dialog", onDialog); page.off("download", onDownload); });
   }
   private invalidate() {
     this.snapshotId = "";
@@ -240,6 +247,7 @@ export class BrowserTools {
       truncated,
       dialogs: this.dialogList(),
       downloads: this.downloadList(),
+      text: (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).slice(0, 24000),
       deliveryMode: "browser-protocol-background",
     };
   }
@@ -285,6 +293,37 @@ export class BrowserTools {
     const operation = required(input, "operation");
     if (!browserOperations.includes(operation as (typeof operations)[number]))
       throw new Error("Unsupported browser operation.");
+    if (operation === "attach") {
+      if (this.context) throw new Error("Close or detach the current browser connection first.");
+      const endpoint = new URL(required(input, "endpoint"));
+      if (!["http:", "ws:"].includes(endpoint.protocol) || !["127.0.0.1", "[::1]", "localhost"].includes(endpoint.hostname) || endpoint.username || endpoint.password)
+        throw new Error("Attachment requires an explicit loopback HTTP or WebSocket debugging endpoint.");
+      const runtimeRequire = createRequire(compiled ? join(dirname(dirname(realpathSync(process.execPath))), "libexec", "browser.cjs") : import.meta.url);
+      const { chromium } = runtimeRequire("playwright-core") as typeof import("playwright-core");
+      if (process.versions.bun) throw new Error('Existing-browser attachment requires the Node CLI runtime. Use the npm-installed cu command, or node dist/cli.mjs.');
+      let websocket = endpoint;
+      if (endpoint.protocol === "http:") {
+        const response = await fetch(new URL('/json/version', endpoint), { redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(10000), ...(signal ? [signal] : [])]) });
+        if (!response.ok) throw new Error('The supplied endpoint does not expose Chromium debugging.');
+        const version = await response.json() as { webSocketDebuggerUrl?: string };
+        websocket = new URL(version.webSocketDebuggerUrl ?? '');
+        if (websocket.protocol !== 'ws:' || !['localhost','127.0.0.1','[::1]'].includes(websocket.hostname) || websocket.port !== endpoint.port || websocket.username || websocket.password)
+          throw new Error('Debugging discovery returned an unrelated endpoint.');
+      }
+      const connection = await chromium.connectOverCDP(websocket.href, { noDefaults: true, timeout: 10000 });
+      if (signal?.aborted) { await connection.close(); signal.throwIfAborted(); }
+      const contexts = connection.contexts();
+      if (contexts.length !== 1) { await connection.close(); throw new Error("Expected one existing browser context. Select a dedicated endpoint."); }
+      this.artifactDir = await mkdtemp(join(tmpdir(), "cu-browser-"));
+      await chmod(this.artifactDir, 0o700);
+      this.attached = connection;
+      this.context = contexts[0]!;
+      this.pageListener = page => this.register(page);
+      this.context.on("page", this.pageListener);
+      for (const page of this.context.pages()) this.register(page);
+      return { tabs: await this.run({ operation: "tabs" }), isolation: "attached-existing-browser", next: "Select an exact pageId. No tab is inferred from a native app name. Closing this connection detaches and preserves the browser." };
+    }
+    if (operation === "detach") { await this.close(); return { status: "detached" }; }
     if (operation === "open") {
       if (!this.context) {
         if (
@@ -331,7 +370,7 @@ export class BrowserTools {
       }
       return {
         tabs: await this.run({ operation: "tabs" }),
-        isolation: "owned-browser-context",
+        isolation: this.attached ? "attached-existing-browser" : "owned-browser-context",
         background: true,
       };
     }
@@ -420,6 +459,9 @@ export class BrowserTools {
       };
     }
     signal?.throwIfAborted();
+    const attachedMac = Boolean(this.attached) && process.platform === 'darwin';
+    if (attachedMac && ['key','doubleClick','rightClick','hover','drag'].includes(operation))
+      throw new Error('This attached Mac gesture would require focus-sensitive browser input. Use a native semantic control or an isolated browser. No event sent.');
     let action: () => Promise<unknown>;
     if (operation === "navigate") {
       const destination = url(required(input, "url"));
@@ -455,7 +497,11 @@ export class BrowserTools {
         Math.abs(amount) > 5000
       )
         throw new Error("Scroll amount must be within 5000 pixels.");
-      action = async () => {
+      action = attachedMac ? () => b.element.evaluate((el, amount) => {
+        const target = el as HTMLElement;
+        if (target.scrollHeight > target.clientHeight) target.scrollBy(0, amount);
+        else window.scrollBy(0, amount);
+      }, amount) : async () => {
         await b.element.hover();
         await page.mouse.wheel(0, amount);
       };
@@ -463,7 +509,12 @@ export class BrowserTools {
       const b = await this.binding(input, page);
       if (operation === "fill") {
         const text = required(input, "text");
-        action = () => b.element.fill(text);
+        action = attachedMac ? () => b.element.evaluate((el, text) => {
+          if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) || el.disabled || el.readOnly || (el instanceof HTMLInputElement && el.type === 'password')) throw new Error('Unsupported DOM text field.');
+          const prototype = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+          Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(el, text);
+          el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+        }, text) : () => b.element.fill(text);
       } else if (operation === "upload") {
         if (
           !Array.isArray(input.paths) ||
@@ -502,8 +553,10 @@ export class BrowserTools {
         };
       } else if (operation === "hover") action = () => b.element.hover();
       else if (["click", "doubleClick", "rightClick"].includes(operation))
-        action = () =>
-          b.element.click({
+        action = attachedMac ? () => b.element.evaluate(el => {
+          if (!(el instanceof HTMLElement)) throw new Error('Unsupported DOM target.');
+          el.click();
+        }) : () => b.element.click({
             button: operation === "rightClick" ? "right" : "left",
             clickCount: operation === "doubleClick" ? 2 : 1,
             noWaitAfter: true,
@@ -546,6 +599,7 @@ export class BrowserTools {
       signal?.throwIfAborted();
       return {
         status: "dispatchedUnverified",
+        inputRoute: attachedMac ? "dom-event-untrusted" : "browser-protocol",
         pageId: this.pageId(page),
         dialogs: this.dialogList(),
         downloads: this.downloadList(),
@@ -677,10 +731,15 @@ export class BrowserTools {
   async close() {
     this.invalidate();
     this.pending = undefined;
-    for (const { dialog } of this.dialogs.values())
+    if (!this.attached) for (const { dialog } of this.dialogs.values())
       void dialog.dismiss().catch(() => {});
     this.dialogs.clear();
-    await this.context?.close();
+    for (const remove of this.listeners.splice(0)) remove();
+    if (this.pageListener) this.context?.off("page", this.pageListener);
+    this.pageListener = undefined;
+    if (this.attached) await this.attached.close(); // CDP disconnect preserves the external browser.
+    else await this.context?.close();
+    this.attached = undefined;
     this.context = undefined;
     this.pages.clear();
     this.frames.clear();

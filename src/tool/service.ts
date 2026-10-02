@@ -69,6 +69,7 @@ export class DesktopTool {
         return { status: (launch as { ready?: boolean })?.ready === false ? 'launching' : 'launched', app: matches[0], launch, next: 'List windows and observe; launch alone does not verify a usable window.' };
       }
       if (name === 'permission') return await request('requestAccessibility');
+      if (name === 'capture-permission') return await request('requestScreenRecording');
       if (!['capture', 'observe', 'wait', 'windows', 'act', 'execute', 'key', 'click', 'type', 'input', 'pointer'].includes(name)) throw new Error(`Unknown command: ${name}`);
       const args = Schema.decodeUnknownSync(Schema.Struct({
         gesture: Schema.optional(Schema.Literals(['doubleClick','rightClick','hover','drag'])), targetRef: Schema.optional(Schema.String),
@@ -90,10 +91,12 @@ export class DesktopTool {
       if (args.expectedOutput !== undefined && (!args.expectedOutput.trim() || args.expectedOutput.length > 4000)) throw new Error('Expected output must contain 1–4000 characters.');
       if (name === 'windows') return await request('windows', { pid });
       let pinnedWindow = args.windowId ?? (this.latest?.pid === pid ? this.latest.windowId : undefined);
+      let observationImage: string | undefined;
       const observe = async () => {
         this.latest = undefined;
         const semantic = Schema.decodeUnknownSync(SnapshotSchema)(await request('snapshot', { pid, ...(pinnedWindow === undefined ? {} : { windowId: pinnedWindow }), ...(args.nodeLimit === undefined ? {} : { nodeLimit: args.nodeLimit }) }));
-        const { snapshot } = await addVisualObservation(semantic, request, args);
+        const { snapshot, image } = await addVisualObservation(semantic, request, args);
+        observationImage = image;
         this.latest = snapshot;
         this.progress('observed', undefined, snapshot);
         const scope = JSON.stringify([snapshot.pid, snapshot.windowId, snapshot.title]);
@@ -154,7 +157,7 @@ export class DesktopTool {
       if (!before || before.pid !== pid || (args.windowId !== undefined && before.windowId !== args.windowId) || (usesRefs && before.id !== args.snapshotId)) throw new Error('Stale snapshot. Observe this app again before executing an exact ref.');
       const scope = JSON.stringify([before.pid, before.windowId, before.title]);
       if (scope !== this.historyScope) { this.history = []; this.historyScope = scope; }
-      if (name === 'observe') return before;
+      if (name === 'observe') return input.includeImage === true && observationImage ? { snapshot: before, image: { base64: observationImage } } : before;
       if (name === 'pointer') {
         const node=before.nodes.find(n=>n.ref===args.ref && n.enabled && n.value!=='[secure]' && n.frame);
         const destination=before.nodes.find(n=>n.ref===args.targetRef && n.enabled && n.value!=='[secure]' && n.frame);

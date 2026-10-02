@@ -1,0 +1,26 @@
+name: Verify Mac helper
+on:
+  push:
+    branches: [main]
+    paths: ['native/macos/**', 'src/macos/**', 'src/linux/vision.ts', 'scripts/**', 'package.json', 'bun.lock', '.github/workflows/mac-helper.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  helper:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      CU_NATIVE_DIR: ${{ github.workspace }}/.context/mac-runtime
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: bun install --frozen-lockfile
+      - run: bun run check && bun run build
+      - run: node scripts/setup-macos.mjs
+      - run: node scripts/test-macos-helper.mjs
