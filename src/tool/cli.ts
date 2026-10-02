@@ -180,7 +180,7 @@ if (command === 'task') {
   for (const name of ['SIGINT', 'SIGTERM'] as const) process.once(name, () => abort.abort());
   const preview = process.platform === 'darwin' && !input['no-preview']
     ? await openTaskPreview(resourcePaths(entry).preview, () => abort.abort(), message => console.error(JSON.stringify({ warning: message }))) : undefined;
-  preview?.send({ state: 'starting', message: `Working in ${input.app}. Close this panel to hide it; Stop cancels the task.` });
+  preview?.send({ state: 'starting', message: `Working in ${input.app}. Captured frames appear in the preview. Ctrl-C cancels the task.` });
   try {
     for (const [index, goal] of (goals as string[]).entries()) {
       let succeeded = false;

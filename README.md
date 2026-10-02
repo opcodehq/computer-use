@@ -30,10 +30,10 @@ request is verified. Action results include fresh state, so it can proceed witho
 asking you for each click. MCP clients can use `cu config generic` and `cu mcp`.
 For an agent with a custom skill directory, run `cu skill generic --dir PATH`.
 
-Mac driver sessions open a native preview with pointers and Stop. Closing the
-preview hides it; Stop pauses input. After the user asks to continue, run
-`cu resume --session my-work`, then observe fresh state. Use `--no-preview` on
-the first session call, or on `cu mcp`, for quiet operation.
+Mac driver sessions show captured frames in a borderless, draggable preview.
+Use `cu pause --session my-work` to pause input and `cu stop --session my-work`
+to close the session. Resume only after the user asks, then observe fresh state.
+Use `--no-preview` on the first session call, or on `cu mcp`, for quiet operation.
 
 ## Install the CLI
 
@@ -133,10 +133,9 @@ your coding-agent subscription. See [agent integrations](docs/AGENTS.md).
 cu task --app Safari --instruction 'Complete the requested workflow and verify the result.'
 ```
 
-A native floating preview opens automatically on Mac, with a local action pointer
-and Stop button. Close it to hide the preview while the task continues, or pass
-`--no-preview`. It shows Accessibility controls by default; `--visual` adds optional
-captured frames. See [CLI preview](docs/CLI_PREVIEW.md).
+A borderless, image-only preview appears on Mac when a captured frame is available.
+`--visual` supplies captured frames for delegated tasks; `--no-preview` hides the
+panel. See [CLI preview](docs/CLI_PREVIEW.md).
 
 The release downloader selects the Mac architecture and verifies SHA-256 before
 installation. Once release assets are published, `sh scripts/download-cli.sh`

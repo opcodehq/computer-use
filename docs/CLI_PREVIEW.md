@@ -1,62 +1,28 @@
 # CLI computer preview
 
-`cu` native driver sessions and optional `cu task` delegation open a small
-native floating panel on macOS. The `jev`
-command is an alias. It needs neither Electron nor a web server. `--no-preview`
-on the first helper call or the MCP/task command suppresses it; machine-readable task output remains on stdout and preview warnings
-use stderr.
+On macOS, captured frames appear in a borderless floating panel. The panel contains
+only the image: no title bar, window buttons, status text, Accessibility wireframes,
+or action overlays. Drag the image to move the panel. It follows the image's aspect
+ratio and stays visible across Spaces without activating the controlled app.
 
-The panel shows the selected app, current state, observed controls, and a local
-animated action pointer. It includes **Stop** and the standard close button:
+Use the same `--session NAME` across CLI calls to keep the preview process alive.
+Browser commands supply a captured frame after each operation. Native capture and
+visual inspection supply images when Screen Recording is permitted for Opcode CU
+Driver. `cu task --visual` uses the existing local perception path. These are
+observation frames, not a continuous video stream. Without an image the panel stays
+hidden; a new observation without an image hides the previous capture.
 
-- **Stop** cancels the current request and pauses native-session input. Read-only
-  inspection remains available. After the user asks to continue, `cu resume --session NAME` or `desktop_resume` resumes the connection; observe fresh state
-  before acting. In optional delegated `task` mode, Stop aborts that task.
-- **Close / Hide** hides only the preview; the task continues.
-- Completion clears action markers and disables Stop. The panel closes shortly
-  after the task process finishes.
+Session controls stay in the CLI:
 
-The panel is nonactivating. It never dispatches input into the target app or moves
-the hardware cursor. It shares the user's desktop; it does not create an isolated
-login, VM, or independent mouse session.
+- `cu pause --session NAME` pauses input.
+- `cu resume --session NAME` resumes after the user requests it; observe fresh state.
+- `cu stop --session NAME` ends the session and closes the preview.
+- `cu preview --session NAME` restarts the preview; the next captured frame shows it.
+- `--no-preview` on the first session call or MCP/task command suppresses the preview.
 
-## What is displayed
+For a delegated task, Ctrl-C cancels the task. The panel closes when its owning
+process exits. Rendering is local; captured pixels are not sent to Jev.
 
-The default is an **Accessibility layout**, labeled as such. No screenshots are
-requested just to display this panel. `cu task --visual` can supply captured frames
-as part of the existing local OCR/YOLO path. Capture permission belongs to the CLI
-host. Captured frames carry their capture time; they are not a continuous video.
-The panel drops an old frame when a newer observation arrives without an image.
-
-Typed values and actionable refs are excluded from the preview's structural
-payload. App labels and optional screenshots may still contain private content;
-all rendering is local. Pixel data is not sent to Jev.
-
-The existing Electron floating view follows the same compact design: one header,
-a large app view, one status line, and Stop/Hide controls. The CLI uses a separate
-AppKit helper so the standalone distribution does not depend on Electron.
-
-## Validation
-
-Linux tests cover event sanitization, retained observations for action markers,
-Stop routing, absent/closed helper handling, compiled-session startup, and renderer
-states. Browser fixture checks cover pointer alignment, stop/completion cleanup,
-and 360×280 layout. These are not native Linux computer-use support.
-
-The first Mac compiled task smoke test completed a five-screen disposable workflow
-with preview discovery and independently persisted results. The subsequent native
-pointer-invariance test was inconclusive because the hardware cursor moved during
-the measurement. Mac testing was then paused at the user's request. Later native
-styling and app-launch readiness changes still require Mac verification.
-
-### Persistent CLI preview
-
-Use the same `--session NAME` across calls to keep the panel alive between commands.
-A standalone command closes its panel when the command exits. Browser-only sessions
-also open the Mac panel automatically, with a local browser frame after each command.
-The panel appears across Spaces without activating the target app.
-
-To reopen a panel you hid, run `cu preview --session NAME`. This does not resume
-paused input. Use `cu stop --session NAME` when finished. If the preview helper is
-missing, run `cu install`. On Linux, use `cu viewer --session NAME` and open its
-private viewer URL; a cloud machine cannot open a native popup on your local Mac.
+Run `cu install` after upgrading to rebuild the Mac preview helper. On Linux,
+`cu viewer --session NAME` returns a private web viewer URL; a cloud machine cannot
+open a native popup on your local Mac. The Electron app has a separate interface.
