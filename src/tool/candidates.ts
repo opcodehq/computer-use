@@ -61,7 +61,7 @@ export function pressCandidates(snapshot: Snapshot): Candidate[] {
 
 export function textCandidates(snapshot: Snapshot): Candidate[] {
   return snapshot.nodes.flatMap((node, index) => {
-    if (!node.enabled || node.value === '[secure]' || !['AXTextField', 'AXTextArea', 'AXComboBox', 'AXSearchField'].includes(node.role)) return [];
+    if (!node.enabled || node.value === '[secure]' || !['AXTextField', 'AXTextArea', 'AXComboBox', 'AXSearchField', 'VisualKeyboard'].includes(node.role)) return [];
     const kind = node.actions.includes('setValue') ? 'setValue' : node.actions.includes('insertText') ? 'insertText' : undefined;
     if (!kind) return [];
     return [{ id: `t${index}`, description: `${node.role}: ${node.name || precedingLabel(snapshot, index) || 'unnamed text field'}; ref=${node.ref}; current value=${node.value.slice(0, 200)}`, action: { kind, ref: node.ref } }];
@@ -141,6 +141,7 @@ export function navigationCandidates(snapshot: Snapshot): Candidate[] {
         Enter: 'Accept the highlighted dropdown option, or submit the focused form',
         Escape: 'Dismiss the open dropdown or dialog without accepting',
       };
+      if (snapshot.source === 'visual') { delete keys['Option+Tab']; delete keys['Option+Shift+Tab']; keys['Control+L'] = 'Focus browser address bar'; keys['Control+T'] = 'Open a new browser tab'; }
       if (['AXButton','AXMenuButton','AXPopUpButton'].includes(node.role)) keys.Space = 'Activate the focused button using Space';
       for (const [key, purpose] of Object.entries(keys)) candidates.push({
         id: `k${index}_${key.replaceAll('+','')}`, description: `${purpose} (key ${key}); receiver is focused ${node.role}: ${node.name || precedingLabel(snapshot, index) || node.value || 'unnamed control'}`,

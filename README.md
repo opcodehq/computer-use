@@ -1,252 +1,171 @@
-# Jev Desktop
+# @opcodehq/cu
 
-A Mac computer-use CLI and MCP server for Claude Code, Codex, and other coding agents. The coding agent plans; Jev selects actions from live Accessibility controls and optional local YOLO/OCR regions; our Swift driver executes it. Effect manages the driver process and request lifecycle. Bun is the package manager and CLI runtime.
+A native computer driver your existing coding agent calls through the CLI or MCP.
+The agent keeps its own model, login, planning and conversation. CU discovers apps,
+reads controls, delivers exact actions, and returns fresh observations.
 
-**Only a TypeSafe API key is needed for Jev tasks.** No extra Claude/OpenAI API key or model ID. Read-only tools need no model credentials. Accessibility is required for controls; Screen Recording is not needed for this core path. No screenshots are sent to Jev.
+**No Jev, model picker, or separate API key is required for native tools.** Your
+agent's existing authentication and usage limits continue to apply. The Electron
+app is optional. Direct API model delegation is an opt-in extension.
 
-## Run on your Mac
+```text
+Your logged-in agent → cu CLI / MCP → native Mac driver → fresh app state
+```
 
-Requires macOS 14+, Bun, and Xcode Command Line Tools.
+## Use it from any agent
+
+An agent with shell access to the controlled Mac can read `cu instructions` and
+start a persistent driver session:
+
+```sh
+cu apps --session my-work
+cu observe --session my-work --app Safari
+cu execute --session my-work --app Safari \
+  --snapshot-id CURRENT_ID --ref CURRENT_REF --operation press
+cu stop --session my-work
+```
+
+The agent substitutes real IDs from observations and continues until your whole
+request is verified. Action results include fresh state, so it can proceed without
+asking you for each click. MCP clients can use `cu config generic` and `cu mcp`.
+For an agent with a custom skill directory, run `cu skill generic --dir PATH`.
+
+Mac driver sessions open a native preview with pointers and Stop. Closing the
+preview hides it; Stop pauses input. After the user asks to continue, run
+`cu resume --session my-work`, then observe fresh state. Use `--no-preview` on
+the first session call, or on `cu mcp`, for quiet operation.
+
+## Install the CLI
+
+The standalone Mac bundle contains `jev`, the native driver, and harness skills.
+Users need **no Python, Node, Bun, Xcode, or source checkout** to run that bundle.
+Requires macOS 14+.
+
+Extract the bundle matching your Mac architecture and run its installer:
+
+```sh
+sh /path/to/extracted-jev-bundle/install.sh
+```
+
+It installs under `~/.local/share/jev` and links `~/.local/bin/cu` (with `jev` as an alias). Add
+`~/.local/bin` to PATH if the installer reports it missing. Then:
+
+```sh
+cu permission    # Request macOS Accessibility access
+cu setup both    # Install skills for Codex and Claude Code
+cu doctor        # Check this command host's readiness
+```
+
+Use `cu setup codex` or `cu setup claude` for just one harness. Accessibility
+must be granted to the responsible host macOS identifies. Capture is optional.
+`setup` and `doctor` exit 2 when required setup remains. Key presence is checked
+locally in `jevReady`; native-tool `ready` does not require a model key. Key validity is checked on the first Jev request.
+
+**Distribution status:** the release builder and installer are in this repository;
+there is not yet a published download or Homebrew formula. To produce a Mac bundle
+from source, a maintainer runs:
 
 ```sh
 bun install --frozen-lockfile
-bun run build:native
-bun run build
-bun start permission
-bun start status
-bun start apps
-bun start observe --app Calculator
+bun run build:cli
 ```
 
-Grant Accessibility to the responsible terminal/host shown by macOS, then restart the tool if needed. The CLI automatically loads the TypeSafe key saved in the app. `TYPESAFE_API_KEY` overrides it; `JEV_SETTINGS_PATH` selects another settings file. Read-only tools and exact-ref actions need no model key.
+This generates `release/jev-VERSION-darwin-ARCH.tar.gz` using Bun and Xcode Command
+Line Tools on the build Mac. The extracted bundle is independent of that checkout.
+For source development only, `bun run setup both` remains available.
+
+## Use it in your current conversation
+
+Ask your coding agent:
+
+> Use jev-desktop to inspect my running Mac apps without changing anything.
+
+Then give it a complete task, for example:
+
+> Use jev-desktop to test Zuse’s terminal: open the panel, run a harmless command,
+> verify its output, then close the panel. Preserve my existing work.
+
+If the agent cannot find the skill, ask it to read its installed file:
+
+| Agent | Installed skill |
+| --- | --- |
+| Codex | `~/.agents/skills/jev-desktop/SKILL.md` |
+| Claude Code | `~/.claude/skills/jev-desktop/SKILL.md` |
+
+A new session is another way to refresh discovery. The skill teaches the agent to
+find or launch the right app, choose exact controls, verify results, and recover
+from local blockers while retaining ownership of the full workflow. You should not have to dictate each click.
+
+**A cloud coding workspace needs a Mac command bridge supplied by its host.**
+Install and execute Jev on the Mac through that bridge. A Linux shell or cloud MCP
+process alone cannot operate your Mac. Jev does not provide a remote bridge.
+
+## Optional delegated workflows
+
+The default workflow stays inside your existing agent. If you explicitly want a
+separate decision loop, `task` supports Jev, Vercel AI SDK providers and custom
+adapters. Direct API calls use provider credentials and their own billing, not
+your coding-agent subscription. See [agent integrations](docs/AGENTS.md).
 
 ```sh
-bun start act --app Calculator --instruction "Press the 7 button"
-bun start act --app TextEdit --operation setValue --instruction "Replace the document text" --text "Hello from my coding agent"
-# Preview the selection without executing:
-bun start act --app Calculator --instruction "Press Clear" --dry-run
+cu task --app Safari --instruction 'Complete the requested workflow and verify the result.'
 ```
 
-`act` returns JSON and performs at most one action; `task` runs multiple steps without a fixed cap. The caller supplies exact text; Jev selects, it does not generate document content. `act` returns `dispatchedUnverified` plus fresh state: inspect that state before deciding the next step. No-match and uncertain selections return without dispatch. The initial 0.6 confidence threshold is provisional, not an accuracy or permission guarantee.
+A native floating preview opens automatically on Mac, with a local action pointer
+and Stop button. Close it to hide the preview while the task continues, or pass
+`--no-preview`. It shows Accessibility controls by default; `--visual` adds optional
+captured frames. See [CLI preview](docs/CLI_PREVIEW.md).
 
-## Use inside your current Codex or Claude session
+The release downloader selects the Mac architecture and verifies SHA-256 before
+installation. Once release assets are published, `sh scripts/download-cli.sh`
+installs the latest release and `CU_VERSION=0.1.0 sh scripts/download-cli.sh` pins
+a version. `cu update` uses the same verified download path. Until publication,
+use a locally built bundle; there is no working public release download yet.
 
-The primary workflow is a skill calling our CLI through the coding agent's
-existing shell tool. It does not launch another agent or require MCP registration.
-The skill is installed on the test Mac for both Codex and Claude.
+## What works today
 
-Tell your existing agent: **“Use jev-desktop to inspect Zuse and test its terminal.”**
-If that already-running session hasn't discovered the new skill, tell it to read
-`~/.agents/skills/jev-desktop/SKILL.md` (Codex) or
-`~/.claude/skills/jev-desktop/SKILL.md` (Claude). It can use the skill immediately.
+- Native Accessibility observation, supported control actions, exact text entry,
+  guarded background clicks/keys, and app discovery/launch.
+- Model-free exact tools and optional multi-step `task` execution with fresh observations and no fixed step cap.
+- Optional local OCR/YOLO for controls missing from Accessibility; no pixels sent
+  to Jev. The host agent can inspect a screenshot when needed.
+- Background input that preserves your hardware cursor and yields when you use
+  the target app.
 
-The agent calls the bundled Python launcher with a unique `--session NAME`:
+This is a Mac beta, not an isolated second desktop. Off-screen windows, secure
+fields, unsupported controls, and unresolved uncertainty can stop a task.
+Cross-app planning, generated text, and missing account information belong to the
+host coding agent. The documented fixture tests do not guarantee arbitrary
+website signup or account setup. Linux native control is not implemented.
 
-```sh
-python3 ~/.agents/skills/jev-desktop/scripts/jev.py observe --session my-task --app 'Zuse (Beta)'
-python3 ~/.agents/skills/jev-desktop/scripts/jev.py act --session my-task --app 'Zuse (Beta)' --instruction 'Open the terminal panel'
-python3 ~/.agents/skills/jev-desktop/scripts/jev.py stop --session my-task
-```
+## Guides
 
-Each call returns JSON. A private Unix-socket helper retains native refs and
-history across separate shell calls. It starts automatically and exits on `stop`
-or after 30 minutes idle. Different tasks should use different session names;
-concurrent calls within a session are rejected when busy. Mutating requests are
-never automatically replayed after a disconnect. A crashed helper may leave a
-stale socket; use a new session name and observe again rather than replaying.
-
-On another Mac, build this checkout and run `bun start skill codex` or
-`bun start skill claude` once. Installed launchers reference this checkout, so keep
-it at that location. The project also includes both agents' skill discovery paths.
-For a cloud harness, execute through its Mac command bridge, not the cloud shell.
-
-## Optional MCP integration
-
-
-From this repository on the Mac being controlled:
-
-```sh
-bun start doctor
-bun start connect codex
-# Or connect Claude Code:
-bun start connect claude
-```
-
-Start a new coding-agent session, then ask: “Use Jev Desktop to inspect Zuse and
-verify the terminal workflow.” The Electron panel does not need to be running.
-The harness uses its existing login and supplies planning/recovery; our tools need
-no extra Claude/OpenAI API key. `connect` registers an absolute Bun/CLI path using
-the agent's own MCP command. Keep this checkout at that path. Claude registration
-uses user scope; Codex uses its normal MCP configuration. Existing host approval
-settings remain in effect. Registration includes no secret.
-
-`bun start config codex` or `config claude` prints the connection specification
-without modifying configuration. Add `--app 'Zuse (Beta)'` to either command to
-restrict the generated connection to that app. Reconnect without this option for
-cross-app work. Default delivery is background-only.
-
-The server provides startup instructions to the harness, keeps one native helper
-alive, and exposes status, running/installed app discovery, launch, windows,
-observation, Jev selection, exact execution, click, type, key and wait tools.
-Fresh state returned by actions avoids redundant observation calls. Exact-ref
-execution skips inference when the host already knows the target. These reduce
-round trips; no new end-to-end latency claim is established.
-
-For other harnesses, `bun start session` accepts newline-delimited JSON and returns
-one JSON response per request, preserving refs throughout the process:
-
-```json
-{"id":1,"method":"observe","args":{"app":"Calculator"}}
-```
-
-Use the resulting snapshot/ref in a subsequent `execute` request in the **same
-process**. A new CLI invocation cannot reuse refs. Request errors do not terminate
-the session. `bun start instructions` prints the harness guidance. One-shot
-commands accept `--input-json '{"app":"Calculator"}'` for structured arguments.
-
-Connection syntax is based on the installed Mac CLIs and official
-[Codex MCP documentation](https://developers.openai.com/codex/mcp) and
-[Claude Code MCP documentation](https://code.claude.com/docs/en/mcp).
-
-The cloud VM cannot control your Mac through local stdio: the MCP host must run on your Mac. A remote bridge is not implemented.
-
-## Current boundaries
-
-Mac Accessibility controls: press, replace value, and insert exact text where advertised.
-MCP also lists windows, pins observations to a window, background-clicks exact
-controls, and types/sends named keys into a proven focused editable receiver.
-`desktop_wait` verifies expected output from fresh observations. Secure fields, general scrolling, and Linux native automation remain
-unsupported. Local YOLO/OCR can ground visible controls missing from AX; background
-pointer compatibility still varies by app. Missing controls return no-match; the coding agent can inspect and
-choose an exact observed action instead of ending the whole task.
-
-The Electron app (`bun run desktop`) defaults to Jev task mode: exact named-app launch requests use an installed-app catalog; other tasks run semantic presses without a fixed step cap with fresh observations and Jev completion judgments. TypeSafe is the only model credential for this mode. It can fill observed writable fields using exact text you provide or phrases copied from your task, then inspect recipient/search suggestions. It stops on uncertainty or unsupported steps; generated prose and general cross-app planning remain the host coding agent’s job. Supported focused-control keyboard navigation is available. The older desktop/browser planner modes still require Claude. CLI/MCP `act` remains one bounded action for the host coding agent to compose.
-
-
-Submit a complete workflow in one `task` invocation. The runner keeps the original
-goal and progress in memory, excludes ineffective actions in unchanged states,
-and selects action and target together. Direct controls are considered before
-keyboard alternatives. If foreground activity prevents dispatch, the same run
-waits and resumes from fresh refs when you leave the target app; Stop cancels it.
-Unknown delivery still stops rather than replaying an action. Recovery and
-completion use separate evidence judgments; unresolved uncertainty can still
-block a task. Progress is not restored after a process restart.
-
-A real native workflow acceptance creates a disposable project, fills its callback,
-reviews, saves, reopens, and independently checks the persisted result. Run on Mac
-with the saved TypeSafe key and Accessibility enabled:
-
-```sh
-node scripts/mac-workflow-session.mjs 'Cedar Sandbox' 'https://sandbox.example.test/login/return'
-```
-
-The test uses one task invocation, no host actions during execution, and no
-screenshots. Its 120-second test timeout is not a product step cap. This fixture
-does not establish arbitrary website or cross-app workflow reliability.
+- [Harness setup and troubleshooting](docs/HARNESS_SETUP.md) — installation,
+  updating, permissions, cloud hosts, and optional MCP.
+- [Task and recovery commands](.agents/skills/jev-desktop/references/commands.md) —
+  complete workflows, persistent sessions, exact actions, and screenshots.
+- [Runtime and development reference](docs/REFERENCE.md) — settings storage,
+  diagnostics, native tests, and implementation boundaries.
+- [Background execution](BACKGROUND_EXECUTION.md) · [Vision](VISION.md) ·
+  [Validation evidence](VALIDATION.md)
 
 ## Development
 
 ```sh
+bun install --frozen-lockfile
 bun run check
 bun test
 bun run build
+# On Mac:
+bun run build:native
+bun run desktop
 ```
 
-The TypeSafe skill is installed at `.agents/skills/typesafe-ai`. Reference checkouts live in ignored `.repos/{effect,agent-desktop,cua}`. Native build output, dependencies, secrets, and `.context` artifacts are ignored. See `VALIDATION.md` for the distinction between automated checks, native Mac checks, and live-model testing.
+Bun manages packages and runs the CLI. Effect manages native driver requests.
+Reference repositories live in ignored `.repos/`; dependencies, build output,
+secrets, and `.context/` artifacts are also ignored.
 
-## Desktop app settings
+## Linux cloud desktops
 
-The Electron app saves your TypeSafe key as plaintext in `config/settings.json` under Electron's user-data directory (on macOS, normally `~/Library/Application Support/jev-desktop`). The config directory is mode 0700 and the file is mode 0600. It does not use Apple Keychain. Save once; later launches load it automatically. Blank key fields preserve the existing key; **Forget saved key** removes it. No saved key is returned to the renderer. Optional Claude credentials remain session-only.
-
-Accessibility and Optional Capture buttons show checked, disabled states only when the native permission checks return true. Status refreshes on return from System Settings and periodically while the app is idle. Capture remains optional and is not used in Jev task mode.
-
-### Sustained Mac agent testing
-
-The local coding agent owns planning and recovery. `desktop_act` uses Jev for a
-narrow semantic judgment; `desktop_execute` accepts an exact control ref and
-snapshot ID from the latest observation when the host resolves an ambiguous
-target. Both return fresh state for verification. No task step cap is imposed.
-
-After building on the Mac, run a scoped session using your existing agent login:
-
-```sh
-python3 scripts/mac-agent-session.py --agent codex --app 'Zuse (Beta)' \
-  --task-file tests/scenarios/zuse.md --output /tmp/jev-zuse-test-1
-```
-
-`--agent claude` is also supported when the account allows Claude Code. The
-launcher reads the app's saved TypeSafe key locally and passes it in the child
-environment; credentials are never written to the MCP config. Each output
-directory must be new. It contains the task, process ID, and private JSONL tool
-trace; Codex also writes `report.md`. Stop the session with `kill -TERM <pid>`
-using the PID printed by the launcher. No global agent config is modified.
-The scenario allows disposable local test items, not sending, publishing,
-launching agents, changing credentials, or creating cloud compute.
-
-The Swift driver supports apps whose `AXWindows` list is empty but whose focused
-or main AX window is valid (including Zuse Beta). The live regression check is:
-
-```sh
-python3 scripts/mac-observation-smoke.py --app 'Zuse (Beta)'
-```
-
-**Concurrent work:** the driver and test launcher now default to background-only
-semantic input. Global pointer/key routes refuse rather than stealing focus. `desktop_click`
-uses our experimental exact-window background pointer route; native button
-delivery has passed controlled native tests, while Zuse compatibility and intermittent
-fixture window discovery remain unresolved. `desktop_type` and `desktop_key` require
-an exact focused editable receiver; they never fall back to global input.
-Cursor animation is suppressed in this mode. This is not complete app-state
-isolation: see [BACKGROUND_EXECUTION.md](BACKGROUND_EXECUTION.md) before running
-end-to-end tasks while using the same app yourself. A separate agent cursor is a
-visualization, not another independent macOS input session.
-
-### Native decision and verification diagnostics
-
-A persistent MCP session now retains the last 20 compact action/outcome events
-for Jev, scoped to the observed app/window/title. This is a context bound, not a
-step limit. Dispatch still never automatically repeats an uncertain action.
-
-To narrow a decision, call `desktop_observe`, then pass its `snapshotId` and a
-`candidateRefs` shortlist to `desktop_act`. Stale/unsupported refs fail before
-inference. Jev still has an abstain option and the existing confidence threshold.
-Results retain the provider's probability distribution, candidate count, and
-separate observation, selection, dispatch, and total timings.
-
-Action tools accept `expectedOutput`: an exact line to check in non-editable
-`AXStaticText` after dispatch, with up to one second of read-only settling.
-`verification.status` reports observed/notObserved/unknown separately from delivery.
-`alreadyPresent` identifies output that predates the action. This is fresh AX
-evidence, not an independent application oracle or proof that the action caused
-that output. `desktop_wait` supports `outputOnly: true` for longer explicit waits.
-
-Native snapshots expose `windowOnScreen` and `observationErrors`. Unexpected AX
-attribute-read errors mark the tree partial. Off-screen background pointer requests
-return `WindowOffScreen` without input or a Space switch. Accessory apps are now
-included in discovery. Electron pointer transport remains experimental; semantic
-AXPress is the preferred supported route.
-
-
-## Hybrid vision and the computer workspace
-
-See [VISION.md](VISION.md) for the pinned YOLO/CoreML export, licensing, local OCR,
-fresh visual references, and screenshot access for the existing host harness.
-The Electron panel now includes a dedicated computer preview, floating preview,
-optional detection boxes, animated action cursor, and a semantic-layout fallback.
-The virtual pointer never moves the hardware mouse. Stop/completion clears it.
-
-Enable **Local vision** for Jev tasks after granting optional capture. Without a
-CoreML detector, OCR works alone with an explicit status message. Detected labels
-and controls go to Jev; pixels stay local. `capture` lets the host coding agent
-inspect a screenshot when an unlabeled icon needs actual visual understanding.
-
-The preview shows the selected Mac window; it is not a separate OS login/VM.
-Background delivery still yields to your activity in the target app. Native compilation, local CoreML/OCR, and a complete disposable canvas click task
-have passed on the Mac, including unchanged foreground and hardware cursor. See
-[VALIDATION.md](VALIDATION.md) for the measured scope and remaining limitations.
-
-
-On macOS, `bun run desktop` uses Launch Services so capture permission belongs to
-the Electron app. Quit an existing instance after rebuilding before reopening it.
-CLI hosts have their own macOS capture grant; enabling capture in Electron does not
-necessarily enable capture for a terminal or Conductor command host.
+Run a separate Xvfb desktop with local YOLO/OCR and model-free CLI/MCP input.
+See [Linux cloud setup and the real desktop smoke test](docs/LINUX_CLOUD.md).

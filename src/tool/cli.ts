@@ -1,7 +1,14 @@
+import { DriverSession } from './driver-session.js';
+import { createDecisionModel, modelConfig, modelDecider, modelProviders } from './model.js';
+import { openAgent } from './agent.js';
+import { openTaskPreview } from './preview.js';
+import { compiled, resourcePaths } from './runtime.js';
+import { authenticate } from './auth.js';
 import { Effect, ManagedRuntime, Schema } from 'effect';
 import { DesktopDriver, driverLayer } from '../main/driver.js';
 import { runDesktopGoal, taskDecider } from './task.js';
 import { installHarnessSkill } from './install-skill.js';
+import { readiness, formatReadiness } from './doctor.js';
 import { dirname } from 'node:path';
 import { ensureSession, secureDirectory, serveSocket, socketPath, socketRequest } from './socket.js';
 import { access } from 'node:fs/promises';
@@ -16,13 +23,20 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { createDesktopTool } from './service.js';
 
-const help = `jev-desktop — Jev computer-use tools for your coding agent
+const help = `cu — @opcodehq/cu native computer driver for your existing agent (jev alias supported)
 
-  skill codex|claude             Install direct shell-tool skill for your existing agent
+Your agent plans and calls these tools using its existing login. No CU model key needed.
+
+  update                        Download and verify the latest published Mac bundle
+  setup codex|claude|both        Install the skill and report readiness
+  skill codex|claude|both        Install or update only the skill
+  skill generic --dir PATH      Install the same skill in another agent’s directory
   COMMAND --session NAME        Call from your current coding agent shell; keeps refs alive
-  stop --session NAME           Stop that desktop helper
+  pause --session NAME          Cancel input and pause this driver session
+  resume --session NAME         Resume after an explicit user request
+  stop --session NAME           Close that desktop helper
   connect codex|claude           Register MCP with your local coding agent
-  config codex|claude            Print connection config without modifying it
+  config codex|claude|generic    Print connection config without modifying it
   doctor                         Check native driver, saved key, and permissions
   session                        Persistent JSONL tool protocol over stdin/stdout
   instructions                   Print coding-agent usage instructions
@@ -38,37 +52,90 @@ const help = `jev-desktop — Jev computer-use tools for your coding agent
                                 Local YOLO/OCR on a file; no live input
   observe --visual --app NAME     Merge Accessibility with local YOLO and OCR
       [--model-path /path/model.mlpackage]
-  observe --app NAME_OR_PID      Read the app's accessibility tree
+  observe --app NAME_OR_PID      Read native controls or Linux YOLO/OCR regions
+  input --session NAME --app APP --snapshot-id ID --input-json ACTION_JSON
+                                Linux: click/type/key/scroll on its isolated display
+  execute --session NAME --app APP --snapshot-id ID --ref REF --operation press
+  execute --session NAME --app APP --snapshot-id ID --ref REF --operation setValue --text TEXT
+  key --session NAME --app APP --snapshot-id ID --ref REF --key Enter
+                                Exact native actions; your agent chooses fresh targets
+
+Optional model delegation (separate credentials):
+  auth [--stdin]                Save a TypeSafe key only for optional Jev selection
   task --app NAME --instruction "Complete this goal; use exact value \"value\""
-                                Run observe/decide/act loop; streams JSONL, no step cap
+                                Run full workflow; popup preview on Mac (--no-preview hides it)
+  providers                     List built-in decision providers and key environment variables
+  task --provider NAME --model ID [--base-url URL] [--api-key-env ENV_NAME]
+                                Use Vercel AI SDK models; no Jev or TypeSafe key
+  task --agent-command PATH [--agent-args '["arg"]']
+                                Use another agent through a persistent JSONL adapter; no TypeSafe key
   act --app NAME_OR_PID --instruction "Press Save"
       [--operation press|setValue|insertText] [--text "exact text"] [--dry-run]
   mcp                            Serve tools over MCP stdio
 
 Requires macOS and a built native driver. Loads the key saved in the app automatically.
-Only Jev selection needs a key. MCP/session preserve refs across calls;
-one-shot invocations do not share refs. Use MCP for Codex/Claude.
+Only Jev selection needs a TypeSafe key; SDK models use their provider credentials. MCP/session preserve refs across calls;
+one-shot invocations do not share refs. Skills are the default for Codex/Claude.
+After installing: cu permission, then cu setup codex|claude|both.
+Other agents: cu instructions or cu config generic. Model delegation is opt-in.
 Actions execute immediately. act performs one action; task runs until completion or a blocker.
 `;
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
+  provider: { type: 'string' }, model: { type: 'string' }, 'base-url': { type: 'string' }, 'api-key-env': { type: 'string' },
+  'agent-command': { type: 'string' }, 'agent-args': { type: 'string' },
+  'no-preview': { type: 'boolean' },
+  'snapshot-id': { type: 'string' }, ref: { type: 'string' }, key: { type: 'string' },
+  stdin: { type: 'boolean' },
   visual: { type: 'boolean' }, overlay: { type: 'boolean' }, 'model-path': { type: 'string' },
-  session: { type: 'string' },
+  session: { type: 'string' }, dir: { type: 'string' },
   'input-json': { type: 'string' },
   app: { type: 'string' }, instruction: { type: 'string' }, operation: { type: 'string' },
   text: { type: 'string' }, 'window-id': { type: 'string' }, 'node-limit': { type: 'string' }, 'dry-run': { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
 } });
 const command = positionals[0];
-if (!command || values.help) { console.log(help); process.exit(0); }
-const entry = fileURLToPath(import.meta.url);
-if (command === 'skill') {
-  console.log(JSON.stringify(await installHarnessSkill(positionals[1] ?? '', process.execPath, entry)));
+if (!command || command === 'help' || values.help) { console.log(help); process.exit(0); }
+if (command === 'providers') {
+  console.log(JSON.stringify({ jev: { keyEnv: 'TYPESAFE_API_KEY', description: 'Optional typed decision backend; default for task.' }, ...modelProviders }, null, 2));
   process.exit(0);
+}
+if (command !== 'task' && [values.provider, values.model, values['base-url'], values['api-key-env'], values['agent-command'], values['agent-args']].some(value => value !== undefined)) {
+  console.error('Decision-model options apply to task. Exact native tools use your host agent; act uses Jev.'); process.exit(1);
+}
+const entry = compiled ? process.execPath : fileURLToPath(import.meta.url);
+if (command === 'update') {
+  if (!compiled) { console.error('For a source checkout, update the checkout and run bun run build:cli.'); process.exit(1); }
+  if (process.platform !== 'darwin') { console.error('CU native releases currently support macOS.'); process.exit(1); }
+  const result = spawnSync('/bin/sh', [resourcePaths(entry).installer], { stdio: 'inherit', shell: false });
+  if (result.error) console.error(result.error.message);
+  if (result.status === 0) console.log('Run cu skill both to refresh installed harness paths.');
+  process.exit(result.status ?? 1);
+}
+if (command === 'auth') {
+  try { await authenticate(values.stdin === true); }
+  catch (error) { console.error(error instanceof Error ? error.message : 'Authentication setup failed'); process.exitCode = 1; }
+  process.exit(process.exitCode ?? 0);
+}
+const installations: Awaited<ReturnType<typeof installHarnessSkill>>[] = [];
+if (command === 'skill' || command === 'setup') {
+  try {
+    if (command === 'setup' && process.platform !== 'darwin') throw new Error('Run setup on the Mac being controlled. Use bun run setup codex|claude|both there.');
+    const client = positionals[1] ?? (values.dir ? 'generic' : undefined);
+    if (!client || !['codex', 'claude', 'both', 'generic'].includes(client)) throw new Error('Choose codex, claude, both, or generic --dir PATH.');
+    for (const target of client === 'both' ? ['codex', 'claude'] : [client]) {
+      installations.push(await installHarnessSkill(target, process.execPath, entry, undefined, values.dir));
+    }
+    if (command === 'skill') {
+      console.log(JSON.stringify({ installations, next: 'Skill installed. Run doctor to check readiness. Ask your current agent to read the installed SKILL.md, or start a new session.' }, null, 2));
+      process.exit(0);
+    }
+  } catch (error) { console.error(error instanceof Error ? error.message : 'Installation failed'); process.exit(1); }
 }
 if (command === 'instructions') { console.log(harnessInstructions); process.exit(0); }
 if (command === 'connect' || command === 'config') {
   try {
     const config = connection(positionals[1] ?? '', process.execPath, entry, values.app);
     if (command === 'config') { console.log(JSON.stringify(config, null, 2)); process.exit(0); }
+    if (config.client === 'generic') throw new Error('Use cu config generic and add its mcpServers entry in your client.');
     if (process.platform !== 'darwin') throw new Error('Run connect on the Mac that will be controlled.');
     const result = spawnSync(config.command, config.args, { stdio: 'inherit', shell: false });
     if (result.error) throw new Error(`Could not run ${config.client}. Install it and put it on PATH.`);
@@ -83,23 +150,37 @@ if (command === 'task') {
   if (!Array.isArray(goals) || goals.length === 0 || goals.some(goal => typeof goal !== 'string' || !goal.trim() || goal.length > 16000)) throw new Error('Supply one instruction or a nonempty milestones array of goal strings.');
   if (typeof input.app !== 'string' || !input.app.trim()) throw new Error('Task requires an exact app name.');
   if (process.env.JEV_ALLOWED_APP && process.env.JEV_ALLOWED_APP !== input.app) throw new Error('This session is scoped to another app.');
-  await loadCredential();
-  const runtime = ManagedRuntime.make(driverLayer(process.env.JEV_DRIVER_PATH ?? fileURLToPath(new URL('../native/macos/build/desktop-driver', import.meta.url))));
+  const agentArgs: unknown = input['agent-args'] ? JSON.parse(input['agent-args']) : [];
+  if (!Array.isArray(agentArgs) || agentArgs.some(arg => typeof arg !== 'string')) throw new Error('--agent-args must be a JSON string array.');
+  if (input['agent-args'] && !input['agent-command']) throw new Error('--agent-args requires --agent-command.');
+  const selectedModel = modelConfig(input);
+  const sdkDecide = selectedModel ? modelDecider(createDecisionModel(selectedModel)) : undefined;
+  if (!input['agent-command'] && !selectedModel) await loadCredential();
+  const agent = input['agent-command'] ? openAgent(input['agent-command'], agentArgs as string[]) : undefined;
+  const decide = sdkDecide ?? agent?.decide ?? taskDecider(() => { if (!process.env.TYPESAFE_API_KEY) throw new Error('Missing TypeSafe API key.'); return process.env.TYPESAFE_API_KEY; });
+  const runtime = ManagedRuntime.make(driverLayer(process.env.JEV_DRIVER_PATH ?? resourcePaths(entry).driver));
   const abort = new AbortController();
   for (const name of ['SIGINT', 'SIGTERM'] as const) process.once(name, () => abort.abort());
+  const preview = process.platform === 'darwin' && !input['no-preview']
+    ? await openTaskPreview(resourcePaths(entry).preview, () => abort.abort(), message => console.error(JSON.stringify({ warning: message }))) : undefined;
+  preview?.send({ state: 'starting', message: `Working in ${input.app}. Close this panel to hide it; Stop cancels the task.` });
   try {
     for (const [index, goal] of (goals as string[]).entries()) {
       let succeeded = false;
       console.log(JSON.stringify({ state: 'milestone', index, total: (goals as string[]).length, message: goal }));
       await runDesktopGoal(goal, input.app,
         (method, args) => runtime.runPromise(Effect.flatMap(DesktopDriver, driver => driver.request(method, { ...args, animate: false })), { signal: abort.signal }),
-        taskDecider(() => { if (!process.env.TYPESAFE_API_KEY) throw new Error('Missing TypeSafe API key.'); return process.env.TYPESAFE_API_KEY; }),
-        event => { console.log(JSON.stringify(event)); if (event.state === 'succeeded') succeeded = true; },
+        decide,
+        event => { console.log(JSON.stringify(event)); preview?.send(event); if (event.state === 'succeeded') succeeded = true; },
         abort.signal, input.text, { visual: input.visual, overlay: input.overlay, modelPath: input.modelPath ?? input['model-path'] });
       if (!succeeded) { process.exitCode = 2; break; }
     }
-  } catch (error) { console.error(JSON.stringify({ error: error instanceof Error ? error.message : 'Task failed' })); process.exitCode = 1; }
-  finally { await runtime.dispose(); }
+  } catch (error) {
+    const message = abort.signal.aborted ? 'Task stopped.' : error instanceof Error ? error.message : 'Task failed';
+    preview?.send({ state: abort.signal.aborted ? 'stopped' : 'failed', message });
+    console.error(JSON.stringify({ error: message })); process.exitCode = abort.signal.aborted ? 2 : 1;
+  }
+  finally { await agent?.close(); await runtime.dispose(); await preview?.close(); }
   process.exit(process.exitCode ?? 0);
 }
 if (values.session && command !== '_serve') {
@@ -107,7 +188,7 @@ if (values.session && command !== '_serve') {
     const path = socketPath(entry, values.session);
     await secureDirectory(dirname(path));
     if (command !== 'stop') await ensureSession(path, entry, values.session);
-    const args = { ...values, modelPath: values['model-path'], ...(values['input-json'] ? JSON.parse(values['input-json']) : {}),
+    const args = { ...values, snapshotId: values['snapshot-id'], modelPath: values['model-path'], ...(values['input-json'] ? JSON.parse(values['input-json']) : {}),
       ...(values['window-id'] ? { windowId: Number(values['window-id']) } : {}),
       ...(values['node-limit'] ? { nodeLimit: Number(values['node-limit']) } : {}),
       ...(values['dry-run'] === undefined ? {} : { dryRun: values['dry-run'] }) };
@@ -120,8 +201,12 @@ if (values.session && command !== '_serve') {
   }
 }
 const credential = await loadCredential();
-const binary = process.env.JEV_DRIVER_PATH ?? fileURLToPath(new URL('../native/macos/build/desktop-driver', import.meta.url));
-const { tool, close } = createDesktopTool(binary);
+const binary = process.env.JEV_DRIVER_PATH ?? resourcePaths(entry).driver;
+const { tool: nativeTool, close: closeNative } = createDesktopTool(binary, event => tool.event(event));
+const tool = new DriverSession((method, args, signal) => nativeTool.call(method, args, signal), async stop =>
+  process.platform === 'darwin' && !values['no-preview']
+    ? openTaskPreview(resourcePaths(entry).preview, stop, message => console.error(JSON.stringify({ warning: message }))) : undefined);
+const close = async () => { await tool.close(); await closeNative(); };
 const write = (line: string) => new Promise<void>((resolve, reject) => process.stdout.write(line, error => error ? reject(error) : resolve()));
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) if (command !== '_serve') process.once(signal, () => { controller.abort(); void close().finally(() => process.exit(130)); });
@@ -130,15 +215,26 @@ if (command === '_serve') {
   const path = socketPath(entry, values.session);
   await secureDirectory(dirname(path));
   await serveSocket(path, (method, args) => tool.call(method, args), close);
-} else if (command === 'doctor') {
+} else if (command === 'doctor' || command === 'setup') {
   let executable = false;
   try { await access(binary, constants.X_OK); executable = true; } catch {}
   let status: unknown, error: string | undefined;
-  if (process.platform === 'darwin' && executable) {
+  if (['darwin', 'linux'].includes(process.platform) && executable) {
     try { status = await tool.call('status', {}, controller.signal); } catch (failure) { error = failure instanceof Error ? failure.message : 'Driver unavailable'; }
   }
-  console.log(JSON.stringify({ platform: process.platform, nativeDriver: { path: binary, executable }, settingsPath: settingsPath(), credential, status, error,
-    next: process.platform !== 'darwin' ? 'Run on the Mac being controlled.' : !executable ? 'Run bun run build:native.' : 'Use connect codex or connect claude; grant Accessibility if status reports it missing.' }, null, 2));
+  const report = readiness({ platform: process.platform, executable, credential, status, error });
+  if (command === 'setup') {
+    console.log('\nJev skill installed:');
+    for (const installation of installations) console.log(`  ${installation.client}: ${installation.skill}`);
+    console.log(`\n${formatReadiness(report)}`);
+    console.log(report.ready ? '\nNative tools ready. Ask your existing agent to use cu; no model setup needed.' : '\nInstalled; finish the required items above, then run jev doctor.');
+    console.log('\nIn your coding agent, ask: “Use jev-desktop to inspect my running Mac apps without changing anything.”');
+    console.log('If it cannot find the skill, ask it to read the SKILL.md path above, or start a new session.');
+    if (!report.ready) process.exitCode = 2;
+  } else {
+    console.log(JSON.stringify({ ...report, platform: process.platform, nativeDriver: { path: binary, executable }, settingsPath: settingsPath(), credential, status, error }, null, 2));
+    if (!report.ready) process.exitCode = 2;
+  }
   await close();
 } else if (command === 'session') {
   try { await runSession(process.stdin, write, (method, args) => tool.call(method, args, controller.signal)); } finally { await close(); }
@@ -147,6 +243,9 @@ if (command === '_serve') {
   const verification = { visual: { type: 'boolean' }, modelPath: { type: 'string' }, overlay: { type: 'boolean' }, expectedOutput: { type: 'string', minLength: 1, maxLength: 4000, description: 'Optional exact output line to check in non-editable AXStaticText after dispatch. Readback is separate from delivery; alreadyPresent means no causal proof.' } };
   const app = { type: 'string', description: 'Exact running app name or PID.' };
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
+    { name: 'desktop_input', description: 'Input in an isolated Linux desktop using the latest screenshot. Coordinates are local to the captured window. Returns fresh state; verify the outcome.', inputSchema: { type: 'object', properties: { app, snapshotId: { type: 'string' }, action: { type: 'object', properties: { kind: { enum: ['click','type','key','scroll'] }, x: { type: 'number' }, y: { type: 'number' }, text: { type: 'string' }, amount: { type: 'integer' } }, required: ['kind'], additionalProperties: false } }, required: ['app','snapshotId','action'], additionalProperties: false } },
+    { name: 'desktop_pause', description: 'Cancel current input and pause this connection. Observations remain available.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+    { name: 'desktop_resume', description: 'Resume input only after the user asks to continue; then observe before acting.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     { name: 'desktop_capture', description: 'Capture the exact selected window for the host reasoning agent. Requires optional Screen Recording. outputPath saves a new owner-only PNG on the controlled Mac; existing files are never overwritten. This is observation, not an action.', inputSchema: { type: 'object', properties: { app, outputPath: { type: 'string' }, windowId: { type: 'integer', minimum: 1 } }, required: ['app'], additionalProperties: false } },
     { name: 'desktop_status', description: 'Read Mac permission status. No model credentials needed.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     { name: 'desktop_installed_apps', description: 'List installed apps with exact names and bundle IDs for background launch.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
@@ -163,7 +262,7 @@ if (command === '_serve') {
   ] }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     try {
-      if (!['desktop_capture', 'desktop_status', 'desktop_apps', 'desktop_installed_apps', 'desktop_launch', 'desktop_observe', 'desktop_act', 'desktop_execute', 'desktop_key', 'desktop_click', 'desktop_type', 'desktop_windows', 'desktop_wait'].includes(request.params.name)) throw new Error('Unknown tool');
+      if (!['desktop_input', 'desktop_capture', 'desktop_status', 'desktop_apps', 'desktop_installed_apps', 'desktop_launch', 'desktop_observe', 'desktop_act', 'desktop_execute', 'desktop_key', 'desktop_click', 'desktop_type', 'desktop_windows', 'desktop_wait'].includes(request.params.name)) throw new Error('Unknown tool');
       const result = await tool.call(request.params.name.slice(8), request.params.arguments ?? {}, extra.signal);
       if (request.params.name === 'desktop_capture' && !request.params.arguments?.outputPath) {
         const capture = Schema.decodeUnknownSync(Schema.Struct({ snapshot: Schema.Unknown, image: Schema.Struct({ base64: Schema.String }) }))(result);
@@ -179,7 +278,7 @@ if (command === '_serve') {
   await server.connect(new StdioServerTransport());
 } else {
   try {
-    const result = await tool.call(command, { ...values, modelPath: values['model-path'], ...(values['input-json'] ? JSON.parse(values['input-json']) : {}), ...(values['window-id'] ? { windowId: Number(values['window-id']) } : {}), ...(values['node-limit'] ? { nodeLimit: Number(values['node-limit']) } : {}), ...(values['dry-run'] === undefined ? {} : { dryRun: values['dry-run'] }) }, controller.signal);
+    const result = await tool.call(command, { ...values, snapshotId: values['snapshot-id'], modelPath: values['model-path'], ...(values['input-json'] ? JSON.parse(values['input-json']) : {}), ...(values['window-id'] ? { windowId: Number(values['window-id']) } : {}), ...(values['node-limit'] ? { nodeLimit: Number(values['node-limit']) } : {}), ...(values['dry-run'] === undefined ? {} : { dryRun: values['dry-run'] }) }, controller.signal);
     const output = Buffer.from(JSON.stringify(result, null, 2) + '\n');
     await new Promise<void>((resolve, reject) => { process.stdout.write(output, error => error ? reject(error) : resolve()); });
   } catch (error) {

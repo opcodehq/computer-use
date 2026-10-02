@@ -23,16 +23,23 @@ try {
   if(!fixturePID)throw Error('Fixture did not launch');
   await new Promise(r=>setTimeout(r,300));
   const started=Date.now();
-  child=spawn(process.env.JEV_BUN ?? join(process.env.HOME,'.bun/bin/bun'),[join(root,'dist/cli.mjs'),'task','--app',String(fixturePID),'--instruction',goal],{cwd:root,stdio:['ignore','pipe','pipe']});
+  child=spawn(process.env.CU_CLI ?? process.env.JEV_BUN ?? join(process.env.HOME,'.bun/bin/bun'),[...(process.env.CU_CLI ? [] : [join(root,'dist/cli.mjs')]),'task','--app',String(fixturePID),'--instruction',goal],{cwd:root,stdio:['ignore','pipe','pipe']});
+  let previewObserved = false;
+  const previewPoll = setInterval(() => {
+    try {
+      const reply=JSON.parse(execFileSync(join(root,'native/macos/build/desktop-driver'),{input:JSON.stringify({id:'preview',method:'apps'})+'\n',encoding:'utf8',timeout:1500})).data;
+      previewObserved ||= reply.some(app=>app.name==='task-preview');
+    } catch {}
+  },500);
   let stdout='',stderr='';child.stdout.on('data',d=>stdout+=d);child.stderr.on('data',d=>stderr+=d);
   let timedOut=false;
   const timer=setTimeout(()=>{timedOut=true;child.kill('SIGTERM');},120000);
   const hardTimer=setTimeout(()=>child.kill('SIGKILL'),125000);
-  const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});clearTimeout(timer);clearTimeout(hardTimer);
+  const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('close',resolve);});clearTimeout(timer);clearTimeout(hardTimer);clearInterval(previewPoll);
   await writeFile(join(evidence,'session.jsonl'),stdout,{mode:0o600});
   const events=stdout.split('\n').filter(Boolean).map(l=>{try{return JSON.parse(l)}catch{return {message:l}}});
   let persisted;try{persisted=JSON.parse(await readFile(result,'utf8'));}catch{}
-  const summary={invocations:1,hostActionsDuringTask:0,screenshots:0,goal,code,timedOut,durationMs:Date.now()-started,terminal:events.at(-1)?.state,message:events.at(-1)?.message,persisted,actions:events.filter(e=>e.state==='acting').map(e=>e.message),stderr};
+  const summary={previewObserved,compiledCLI:Boolean(process.env.CU_CLI),invocations:1,hostActionsDuringTask:0,screenshots:0,goal,code,timedOut,durationMs:Date.now()-started,terminal:events.at(-1)?.state,message:events.at(-1)?.message,persisted,actions:events.filter(e=>e.state==='acting').map(e=>e.message),stderr};
   await writeFile(join(evidence,'summary.json'),JSON.stringify(summary,null,2),{mode:0o600});await appendFile(join(evidence,'runs.jsonl'),JSON.stringify(summary)+'\n',{mode:0o600});console.log(JSON.stringify(summary));
   if(code!==0||summary.terminal!=='succeeded'||persisted?.name!==name||persisted?.callback!==callback||persisted?.saves!==1||persisted?.reopened!==true)process.exitCode=1;
 } finally {

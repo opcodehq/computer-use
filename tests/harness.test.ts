@@ -28,7 +28,7 @@ test('connection arguments preserve literal paths and scope without embedding a 
     assert.equal(result.server.env.JEV_INTERACTION_MODE, 'background');
     assert.ok(!JSON.stringify(result).includes('TYPESAFE_API_KEY='));
   }
-  assert.throws(() => connection('other', '/bun', '/cli'), /codex or claude/);
+  assert.throws(() => connection('other', '/bun', '/cli'), /codex, claude, or generic/);
 });
 
 test('persistent JSONL session preserves state and recovers after malformed input', async () => {
@@ -40,4 +40,12 @@ test('persistent JSONL session preserves state and recovers after malformed inpu
   });
   assert.deepEqual(results.map(r => r.ok), [true, false, true]);
   assert.equal(results[2].id, 2);
+});
+
+
+test('generic MCP config exposes model-free native tools without credentials', () => {
+  const result = connection('generic', '/bin/cu', '/dist/cli.mjs', 'Safari');
+  assert.deepEqual(result.mcpServers?.['opcode-cu'], result.server);
+  assert.equal(result.server.env.JEV_ALLOWED_APP, 'Safari');
+  assert.equal(result.server.env.TYPESAFE_API_KEY, undefined);
 });

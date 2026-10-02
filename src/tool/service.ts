@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { TypeSafeClient, choice } from '@typesafe-ai/sdk';
 import { Effect, ManagedRuntime, Schema } from 'effect';
 import { DesktopDriver, driverLayer } from '../main/driver.js';
-import { SnapshotSchema, type Snapshot, type Candidate } from '../shared/contracts.js';
+import { SnapshotSchema, type Snapshot, type Candidate, type Event } from '../shared/contracts.js';
 import { pressCandidates, textCandidates } from './candidates.js';
 import { decisionState } from './decision-state.js';
 import { validateCandidate } from '../main/policy.js';
@@ -35,7 +35,7 @@ export class DesktopTool {
     this.history.push(JSON.stringify(event));
     this.history = this.history.slice(-20);
   }
-  constructor(private request: (method: string, args?: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>, private select: Selector = selectWithJev, private progress: (stage: string, candidate?: Candidate) => void = () => {}, private readonly interactionMode: 'background' | 'foreground' = process.env.JEV_INTERACTION_MODE === 'foreground' ? 'foreground' : 'background') {}
+  constructor(private request: (method: string, args?: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>, private select: Selector = selectWithJev, private progress: (stage: string, candidate?: Candidate, snapshot?: Snapshot) => void = () => {}, private readonly interactionMode: 'background' | 'foreground' = process.env.JEV_INTERACTION_MODE === 'foreground' ? 'foreground' : 'background') {}
   async call(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
     if (this.busy) throw new Error('Desktop is busy. Wait for the current call before issuing another.');
     this.busy = true;
@@ -66,12 +66,12 @@ export class DesktopTool {
         if (process.env.JEV_ALLOWED_APP && matches[0]!.name !== process.env.JEV_ALLOWED_APP) throw new Error('This session is scoped to another app.');
         this.latest = undefined; this.history = []; this.historyScope = '';
         const launch = await request('launchApp', { appId: matches[0]!.id });
-        return { status: 'launched', app: matches[0], launch, next: 'List windows and observe; launch alone does not verify a usable window.' };
+        return { status: (launch as { ready?: boolean })?.ready === false ? 'launching' : 'launched', app: matches[0], launch, next: 'List windows and observe; launch alone does not verify a usable window.' };
       }
       if (name === 'permission') return await request('requestAccessibility');
-      if (!['capture', 'observe', 'wait', 'windows', 'act', 'execute', 'key', 'click', 'type'].includes(name)) throw new Error(`Unknown command: ${name}`);
+      if (!['capture', 'observe', 'wait', 'windows', 'act', 'execute', 'key', 'click', 'type', 'input'].includes(name)) throw new Error(`Unknown command: ${name}`);
       const args = Schema.decodeUnknownSync(Schema.Struct({
-        outputPath: Schema.optional(Schema.String),
+        outputPath: Schema.optional(Schema.String), action: Schema.optional(Schema.Unknown),
         candidateRefs: Schema.optional(Schema.Array(Schema.String)), expectedOutput: Schema.optional(Schema.String),
         outputOnly: Schema.optional(Schema.Boolean), waitText: Schema.optional(Schema.String), timeoutMs: Schema.optional(Schema.Number), match: Schema.optional(Schema.Literals(['contains','exactLine'])),
         windowId: Schema.optional(Schema.Number), nodeLimit: Schema.optional(Schema.Number),
@@ -94,6 +94,7 @@ export class DesktopTool {
         const semantic = Schema.decodeUnknownSync(SnapshotSchema)(await request('snapshot', { pid, ...(pinnedWindow === undefined ? {} : { windowId: pinnedWindow }), ...(args.nodeLimit === undefined ? {} : { nodeLimit: args.nodeLimit }) }));
         const { snapshot } = await addVisualObservation(semantic, request, args);
         this.latest = snapshot;
+        this.progress('observed', undefined, snapshot);
         const scope = JSON.stringify([snapshot.pid, snapshot.windowId, snapshot.title]);
         if (scope !== this.historyScope) { this.history = []; this.historyScope = scope; }
         pinnedWindow = snapshot.windowId;
@@ -124,12 +125,21 @@ export class DesktopTool {
         } while (performance.now() < until);
         return { status: 'notObserved', dispatched: false, message: 'Expected text was not observed; this does not prove absence in a partial tree.', snapshot: snapshot! };
       }
-      const usesRefs = ['execute', 'key', 'click', 'type'].includes(name) || args.candidateRefs !== undefined;
+      const usesRefs = ['execute', 'key', 'click', 'type', 'input'].includes(name) || args.candidateRefs !== undefined;
       const before = usesRefs ? this.latest : await observe();
       if (!before || before.pid !== pid || (args.windowId !== undefined && before.windowId !== args.windowId) || (usesRefs && before.id !== args.snapshotId)) throw new Error('Stale snapshot. Observe this app again before executing an exact ref.');
       const scope = JSON.stringify([before.pid, before.windowId, before.title]);
       if (scope !== this.historyScope) { this.history = []; this.historyScope = scope; }
       if (name === 'observe') return before;
+      if (name === 'input') {
+        if (before.source !== 'visual') throw new Error('Raw input requires an isolated Linux visual session.');
+        this.latest = undefined;
+        this.progress('acting', undefined, before);
+        const result = await request('linuxInput', { snapshotId: before.id, action: args.action });
+        this.progress('observing');
+        return { status: 'dispatchedUnverified', result, snapshot: await observe() };
+      }
+
       if (name === 'act' && (!args.instruction?.trim() || args.instruction.length > 4000)) throw new Error('Provide an instruction of 1–4000 characters.');
       const operation = args.operation ?? 'press';
       if (!['press','focus'].includes(operation) && args.text === undefined) throw new Error('Text operations require exact caller-supplied text.');
@@ -139,14 +149,14 @@ export class DesktopTool {
       const clicked = name === 'click' ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.frame && node.actions.length > 0) : undefined;
       if (name === 'click' && !clicked) throw new Error('Click requires a visible actionable ref from the latest snapshot.');
       const keyboardTarget = ['key', 'type'].includes(name) && (name === 'type' || this.interactionMode === 'background')
-        ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.focused && (name === 'key' ? node.role !== 'AXWindow' && node.actions.length > 0 : ['AXTextField','AXTextArea','AXComboBox'].includes(node.role))) : undefined;
+        ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.focused && (name === 'key' ? node.role !== 'AXWindow' && node.actions.length > 0 : ['AXTextField','AXTextArea','AXComboBox', ...(before.source === 'visual' ? ['VisualKeyboard'] : [])].includes(node.role))) : undefined;
       if ((name === 'type' || (name === 'key' && this.interactionMode === 'background')) && !keyboardTarget) throw new Error('Background keyboard requires a fresh focused control; text input requires an editable field. Focus and observe first.');
       if (name === 'type' && (!args.text || args.text.length > 8000)) throw new Error('Supply 1–8000 characters of exact text.');
       let candidates: Candidate[];
       if (clicked) {
         candidates = [{ id: 'click', description: `Click ${clicked.role}: ${clicked.name}`, action: { kind: clicked.actions.includes('visualClick') ? 'visualClick' : this.interactionMode === 'background' ? 'backgroundClick' : 'clickElement', ref: clicked.ref } }];
       } else if (keyboardTarget) {
-        candidates = [{ id: 'keyboard', description: `${name === 'type' ? 'Type text' : `Press ${args.key}`} in ${keyboardTarget.name}`, action: { kind: name === 'type' ? 'backgroundText' : 'backgroundKey', ref: keyboardTarget.ref, text: name === 'type' ? args.text : args.key } }];
+        candidates = [{ id: 'keyboard', description: `${name === 'type' ? 'Type text' : `Press ${args.key}`} in ${keyboardTarget.name}`, action: { kind: name === 'type' ? before.source === 'visual' ? 'insertText' : 'backgroundText' : 'backgroundKey', ref: keyboardTarget.ref, text: name === 'type' ? args.text : args.key } }];
       } else if (name === 'key') {
         candidates = [{ id: 'key', description: `Press ${args.key} in the observed window`, action: { kind: 'key', text: args.key } }];
       } else if (name === 'execute') {
@@ -182,7 +192,7 @@ export class DesktopTool {
       if (args.dryRun) return { status: 'preview', dispatched: false, selectionSource, selection, selected, candidateCount: candidates.length, timingMs: timings(), snapshot: before };
       const actionSummary = selected.description.replace(/; ref=[^;]+/, '').slice(0, 600);
       this.remember({ event: 'action', action: actionSummary, outcome: 'pending', confidence: selection.confidence });
-      this.progress('acting', selected);
+      this.progress('acting', selected, before);
       this.latest = undefined;
       let delivery: unknown;
       let uncertain = false;
@@ -232,8 +242,8 @@ function outputRefs(snapshot: Snapshot, expected: string) {
     .map(node => node.ref);
 }
 
-export function createDesktopTool(binary: string) {
+export function createDesktopTool(binary: string, progress: (event: Event) => void = () => {}) {
   const runtime = ManagedRuntime.make(driverLayer(binary));
-  const tool = new DesktopTool((method, args, signal) => runtime.runPromise(Effect.flatMap(DesktopDriver, driver => driver.request(method, args)), { signal }));
+  const tool = new DesktopTool((method, args, signal) => runtime.runPromise(Effect.flatMap(DesktopDriver, driver => driver.request(method, args)), { signal }), selectWithJev, (state, candidate, snapshot) => progress({ state, candidate, snapshot, message: state === 'acting' ? 'Applying your agent’s action.' : 'Reading fresh app state.' }));
   return { tool, close: () => runtime.dispose() };
 }

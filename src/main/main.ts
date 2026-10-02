@@ -14,6 +14,9 @@ import { DesktopDriver, DriverError, driverLayer } from './driver.js';
 import { modelLayer } from './models.js';
 import { TaskRunner, runnerLayer } from './runner.js';
 
+// Keep existing settings and traces independent of the npm package name.
+app.setPath('userData', join(app.getPath('appData'), 'jev-desktop'));
+
 const root = dirname(fileURLToPath(import.meta.url));
 const binary = join(root, '../native/macos/build/desktop-driver');
 let window: BrowserWindow | undefined;

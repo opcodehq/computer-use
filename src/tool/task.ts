@@ -7,8 +7,8 @@ import { Schema } from 'effect';
 import { SnapshotSchema, type Snapshot, type Candidate, type Event } from '../shared/contracts.js';
 import { validateCandidate } from '../main/policy.js';
 
-export type TaskDecision = { operation: string; target: string; confidence: number; complete: number; operationConfidence?: number; targetConfidence?: number; text?: string; navigationSupport?: number; actionSupport?: number; completionEvidence?: number };
-export type TaskDecider = (goal: string, snapshot: Snapshot, candidates: Candidate[], history: string[], signal?: AbortSignal, textValues?: string[]) => Promise<TaskDecision>;
+export type TaskDecision = { source?: 'agent'; observedEvidence?: string; operation: string; target: string; confidence: number; complete: number; operationConfidence?: number; targetConfidence?: number; text?: string; navigationSupport?: number; actionSupport?: number; completionEvidence?: number };
+export type TaskDecider = (goal: string, snapshot: Snapshot, candidates: Candidate[], history: string[], signal?: AbortSignal, textValues?: string[], image?: string) => Promise<TaskDecision>;
 export const taskDecider = (getKey: () => string): TaskDecider => async (goal, snapshot, candidates, history, signal, textValues = []) => {
   // Choose the action and receiver together. Independent operation/target
   // questions can disagree on which part of a long goal to work on next.
@@ -84,6 +84,7 @@ export function isNavigationPreparation(candidate: Candidate): boolean {
     (candidate.action.kind === 'backgroundKey' && ['Tab','Shift+Tab','Option+Tab','Option+Shift+Tab','ArrowDown','ArrowUp'].includes(candidate.action.text ?? ''));
 }
 export function acceptsTaskDecision(decision: TaskDecision, candidates: Candidate[]): boolean {
+  if (decision.source === 'agent') return decision.operation === 'done' || decision.operation === 'blocked' || candidates.some(c => c.id === decision.target);
   if (!Number.isFinite(decision.confidence) || decision.confidence < 0 || decision.confidence > 1) return false;
   if (decision.confidence >= 0.6) return true;
   const candidate = candidates.find(c => c.id === decision.target);
@@ -95,6 +96,7 @@ export function acceptsTaskDecision(decision: TaskDecision, candidates: Candidat
 /** Completion requires agreement from operation selection and outcome evidence.
  * This provisional 0.90 gate matches the planner route; it never authorizes input. */
 export function acceptsTaskCompletion(decision: TaskDecision): boolean {
+  if (decision.source === 'agent') return decision.operation === 'done' && Boolean(decision.observedEvidence?.trim());
   if (decision.operation !== 'done' || ![decision.confidence, decision.complete].every(n => Number.isFinite(n) && n >= 0 && n <= 1)) return false;
   return (decision.confidence >= 0.9 && decision.complete >= 0.9) ||
     (decision.confidence >= 0.6 && Number.isFinite(decision.completionEvidence) && decision.completionEvidence! >= 0.9 && decision.completionEvidence! <= 1);
@@ -241,7 +243,7 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
       : inspectionAction ? { operation: 'press', target: inspectionAction.id, confidence: 1, complete: 0 }
       : resumedTarget && pausedIntent
       ? { ...pausedIntent.decision, target: resumedTarget.id }
-      : await decide(goal, snapshot, candidates, history, signal, textValues);
+      : await decide(goal, snapshot, candidates, history, signal, textValues, observation.image);
     pausedIntent = undefined;
     signal.throwIfAborted();
     if (!acceptsTaskDecision(decision, candidates)) {
@@ -290,9 +292,9 @@ export async function runDesktopGoal(goal: string, app: string, request: NativeR
       emit({ state: 'blocked', message: `Jev selected ${decision.operation}, but confidence was too low: operation=${decision.operationConfidence?.toFixed(2) ?? 'unavailable'}, target=${decision.targetConfidence?.toFixed(2) ?? 'unavailable'}, required=0.60; navigationSupport=${decision.navigationSupport?.toFixed(3) ?? 'notChecked'}; actionSupport=${decision.actionSupport?.toFixed(3) ?? 'notChecked'}; proposed=${candidates.find(c => c.id === decision.target)?.description ?? decision.target}. ${snapshot.truncated ? 'Observation is partial. ' : ''}No action was sent.`, snapshot }); return;
     }
     uncertaintyRefreshes = 0;
-    if (decision.confidence < 0.6) emit({ state: 'selecting', message: `Next action confirmed by a separate evidence judgment (${(decision.actionSupport ?? decision.navigationSupport)?.toFixed(3)}); original choice confidence=${decision.confidence.toFixed(3)}.` });
+    if (decision.source !== 'agent' && decision.confidence < 0.6) emit({ state: 'selecting', message: `Next action confirmed by a separate evidence judgment (${(decision.actionSupport ?? decision.navigationSupport)?.toFixed(3)}); original choice confidence=${decision.confidence.toFixed(3)}.` });
     if (decision.operation === 'done') {
-      emit({ state: acceptsTaskCompletion(decision) ? 'succeeded' : 'blocked', message: acceptsTaskCompletion(decision) ? 'Jev judged the full goal complete from the fresh observation. Check the result.' : `Completion needs agreement at 0.900: operation=${decision.confidence.toFixed(3)}, evidence=${decision.complete.toFixed(3)}, final-screen audit=${decision.completionEvidence?.toFixed(3) ?? 'notRun'}.`, snapshot }); return;
+      emit({ state: acceptsTaskCompletion(decision) ? 'succeeded' : 'blocked', message: acceptsTaskCompletion(decision) ? (decision.source === 'agent' ? `Agent reported completion, citing current observation: ${decision.observedEvidence}. Check the result.` : 'Jev judged the full goal complete from the fresh observation. Check the result.') : `Completion needs agreement at 0.900: operation=${decision.confidence.toFixed(3)}, evidence=${decision.complete.toFixed(3)}, final-screen audit=${decision.completionEvidence?.toFixed(3) ?? 'notRun'}.`, snapshot }); return;
     }
     let selected = candidates.find(c => c.id === decision.target);
     if (!['press', 'write'].includes(decision.operation) || !selected) { emit({ state: 'blocked', message: 'No supported next action. Try supplying the exact text or a more specific recipient. No offered control matches the selected operation.', snapshot }); return; }

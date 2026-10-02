@@ -71,7 +71,7 @@ export function visualCandidates(snapshot: Snapshot): Candidate[] {
     });
 }
 export async function addVisualObservation(snapshot: Snapshot, request: (method: string, args?: Record<string,unknown>) => Promise<unknown>, options: VisualOptions): Promise<{ snapshot: Snapshot; image?: string; imageFrame?: { x: number; y: number; width: number; height: number } }> {
-  if (!options.visual) return { snapshot };
+  if (!options.visual && snapshot.source !== 'visual') return { snapshot };
   try {
     const visual = Schema.decodeUnknownSync(VisualSchema)(await request('detect', { snapshotId: snapshot.id, modelPath: options.modelPath, overlay: options.overlay === true }));
     return { snapshot: fuseVisual(snapshot, visual), image: visual.overlay ?? visual.image, imageFrame: { x: visual.origin!.x, y: visual.origin!.y, width: visual.pointSize?.width ?? visual.width, height: visual.pointSize?.height ?? visual.height } };

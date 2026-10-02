@@ -580,11 +580,17 @@ struct SavedElement {
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = foregroundAllowed
             let running = try await NSWorkspace.shared.openApplication(at: target.url, configuration: configuration)
+            // NSWorkspace can return before the app has finished initializing.
+            // Wait for readiness without bringing its window forward.
+            for _ in 0..<30 {
+                if running.isFinishedLaunching || running.isTerminated { break }
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
             for _ in 0..<(foregroundAllowed ? 10 : 0) {
                 if NSWorkspace.shared.frontmostApplication?.processIdentifier == running.processIdentifier { break }
                 try await Task.sleep(nanoseconds: 100_000_000)
             }
-            return ["pid": Int(running.processIdentifier), "active": NSWorkspace.shared.frontmostApplication?.processIdentifier == running.processIdentifier]
+            return ["pid": Int(running.processIdentifier), "ready": running.isFinishedLaunching && !running.isTerminated, "active": NSWorkspace.shared.frontmostApplication?.processIdentifier == running.processIdentifier]
         case "windows":
             try requireAX()
             guard let pid = request["pid"] as? Int, pid > 0, pid <= Int(Int32.max) else { throw DriverFailure(code: "InvalidRequest", message: "Select an application.") }

@@ -15,6 +15,9 @@ export class ComputerPreview {
     clearTimeout(this.clearTimer); el('virtual-cursor').hidden = true; el('action-ring').hidden = true;
   }
   update(event: Event) {
+    el('screen-stage').dataset.state = event.state;
+    el('preview-task-state').textContent = ({ acting: 'Working', selecting: 'Thinking', observing: 'Checking', succeeded: 'Done', stopped: 'Stopped', blocked: 'Needs attention', starting: 'Starting', preview: 'Preview' } as Record<string, string>)[event.state] ?? event.state;
+    el('preview-task-state').dataset.state = event.state;
     if (event.state === 'starting') this.reset();
     if (event.state === 'refreshing') this.clearMarkers();
     if (event.image && event.imageFrame) {
@@ -24,6 +27,9 @@ export class ComputerPreview {
       el('preview-status').textContent = `Window capture · ${new Date().toLocaleTimeString()}`;
     }
     if (event.snapshot?.visual?.model === 'unavailable') { this.hasImage = false; el('capture').hidden = true; }
+    if (event.snapshot && this.snapshot && event.snapshot.id !== this.snapshot.id && !event.image) {
+      this.hasImage = false; el('capture').hidden = true;
+    }
     if (event.snapshot) {
       this.snapshot = event.snapshot;
       el('preview-title').textContent = event.snapshot.title || 'Computer';
@@ -47,6 +53,10 @@ export class ComputerPreview {
           this.clearTimer = setTimeout(() => this.clearMarkers(), 2200);
         }
       }
+    }
+    if (['starting','selecting','acting','observing','waiting'].includes(event.state)) {
+      const node = this.snapshot?.nodes.find(n => n.ref === event.candidate?.action.ref);
+      el('preview-status').textContent = node?.name ? `${event.candidate?.action.kind === 'press' ? 'Click' : 'Interact with'} ${node.name}` : event.message;
     }
     if (terminal.has(event.state)) {
       this.clearMarkers();

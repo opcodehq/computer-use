@@ -16,18 +16,18 @@ export function validateCandidate(candidate: Candidate, snapshot: Snapshot, hasI
     return;
   }
   if (action.kind === 'click') {
-    if (snapshot.source !== 'ax' || !hasImage || !Number.isFinite(action.x) || !Number.isFinite(action.y) || action.x! < 0 || action.y! < 0) reject('Pixel actions require fresh visual evidence.');
+    if (!['ax','visual'].includes(snapshot.source) || !hasImage || !Number.isFinite(action.x) || !Number.isFinite(action.y) || action.x! < 0 || action.y! < 0) reject('Pixel actions require fresh visual evidence.');
     return;
   }
   const node = snapshot.nodes.find(node => node.ref === action.ref);
   if (!node || !node.enabled || node.value === '[secure]') return reject('The target is missing, disabled, or protected.');
   if (action.kind === 'visualClick') {
-    if (snapshot.source !== 'ax' || !snapshot.visual || !node.visualSource || !node.actions.includes('visualClick') ||
+    if (!['ax','visual'].includes(snapshot.source) || !snapshot.visual || !node.visualSource || !node.actions.includes('visualClick') ||
         !node.ref.startsWith(`${snapshot.id}:visual:`) || !node.frame || !Number.isFinite(node.detectionConfidence) || node.detectionConfidence! < 0.35) reject('Visual click requires a detected region from this capture.');
     return;
   }
   if (action.kind === 'backgroundKey') {
-    if (snapshot.source !== 'ax' || !node.focused || !['Tab','Shift+Tab','Option+Tab','Option+Shift+Tab','ArrowDown','ArrowUp','Enter','Escape','Space'].includes(action.text ?? '')) reject('Keyboard navigation requires the observed focused control and a supported key.');
+    if (!['ax','visual'].includes(snapshot.source) || !node.focused || ![...['Tab','Shift+Tab','Option+Tab','Option+Shift+Tab','ArrowDown','ArrowUp','Enter','Escape','Space'], ...(snapshot.source === 'visual' ? ['Control+L','Control+T'] : [])].includes(action.text ?? '')) reject('Keyboard navigation requires the observed focused control and a supported key.');
     return;
   }
   const capability = action.kind === 'press' ? 'AXPress' : action.kind;

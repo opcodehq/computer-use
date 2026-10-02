@@ -11,7 +11,7 @@ export const NodeSchema = Schema.Struct({
 export const SnapshotSchema = Schema.Struct({
   visual: Schema.optional(Schema.Struct({ model: Schema.String, durationMs: Schema.Number, regionCount: Schema.Number, warning: Schema.optional(Schema.String) })),
   windowOnScreen: Schema.optional(Schema.Boolean), observationErrors: Schema.optional(Schema.Number), windowId: Schema.optional(Schema.Number), windowListed: Schema.optional(Schema.Boolean), capturedAt: Schema.optional(Schema.String),
-  id: Schema.String, source: Schema.Literals(['ax', 'dom']),
+  id: Schema.String, source: Schema.Literals(['ax', 'dom', 'visual']),
   pid: Schema.Number, title: Schema.String,
   nodes: Schema.Array(NodeSchema), truncated: Schema.Boolean,
 });

@@ -131,4 +131,5 @@ element('preview').onclick = async () => {
 };
 element('popout').onclick = () => { void api.popout().catch(report); };
 
+element('preview-close').onclick = () => window.close();
 element('preview-stop').onclick = () => { void api.stop().catch(e => { element('preview-status').textContent = e instanceof Error ? e.message : String(e); }); };

@@ -1,0 +1,30 @@
+name: Build Mac CLI bundle
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun test tests/install-skill.test.ts tests/harness.test.ts tests/socket.test.ts tests/cli-preview.test.ts
+      - run: bun run build:cli --test-only
+      - run: bun scripts/test-cli-bundle.mjs
+      - run: bun run build:cli
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cu-${{ matrix.runner }}
+          path: |
+            release/cu-darwin-*.tar.gz
+            release/cu-darwin-*.sha256
+          if-no-files-found: error

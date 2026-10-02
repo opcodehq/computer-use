@@ -1,3 +1,4 @@
+import { cliInvocation } from './runtime.js';
 import { createServer, createConnection } from 'node:net';
 import { mkdir, chmod, lstat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,7 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 export function socketPath(entry: string, session: string) {
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(session)) throw new Error('Session name must be 1–64 letters, digits, underscores or hyphens.');
-  const identity = JSON.stringify([entry, session, process.env.JEV_ALLOWED_APP, process.env.JEV_DRIVER_PATH, process.env.JEV_SETTINGS_PATH]);
+  const identity = JSON.stringify([entry, session, process.env.JEV_ALLOWED_APP, process.env.JEV_DRIVER_PATH, process.env.JEV_SETTINGS_PATH, process.env.DISPLAY, process.env.CU_LINUX_DESKTOP]);
   const key = createHash('sha256').update(identity).digest('hex').slice(0, 24);
   return join(tmpdir(), `jev-${process.getuid?.() ?? 'user'}`, `${key}.sock`);
 }
@@ -44,7 +45,8 @@ export async function ensureSession(path: string, entry: string, session: string
   catch (error) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
   }
-  const child = spawn(process.execPath, [entry, '_serve', '--session', session], {
+  const invocation = cliInvocation(entry);
+  const child = spawn(invocation.command, [...invocation.args, '_serve', '--session', session], {
     detached: true, stdio: 'ignore', env: { ...process.env, JEV_INTERACTION_MODE: 'background' },
   });
   child.on('error', () => {}); child.unref();
