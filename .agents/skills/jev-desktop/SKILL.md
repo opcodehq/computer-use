@@ -63,8 +63,8 @@ state. `cu pause` and `cu stop` remain available from the CLI. Use `--no-preview
 on the first helper call, or `cu mcp --no-preview`, for quiet operation.
 A preview is not a separate desktop or VM.
 
-For Mac permission setup, `cu permission` and `cu capture-permission` open an
-Opcode guide with a draggable app card. The user grants access in System Settings;
+For Mac permission setup, `cu permission` and `cu capture-permission` open System
+Settings with an Opcode drag strip attached to its window. The user grants access there;
 the guide reports live status from the helper. If macOS requests a restart, finish
 active sessions before `cu helper-restart`. A displayed guide is not proof of a grant.
 

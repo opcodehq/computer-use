@@ -24,7 +24,7 @@ const injected = original.replace('\n    }\n    @objc func stopTask()', `
 assert.notEqual(injected, original);
 await writeFile(join(temporary,'Preview.swift'), injected);
 const binary = join(temporary,'task-preview-test');
-execFileSync('xcrun', ['swiftc','-swift-version','5','-parse-as-library','-framework','AppKit',join(temporary,'Preview.swift'),'-o',binary]);
+execFileSync('xcrun', ['swiftc','-swift-version','5','-parse-as-library','-framework','AppKit',join(temporary,'Preview.swift'),join(root,'native/macos/Glass.swift'),'-o',binary]);
 const driver = spawn(join(root,'native/macos/build/desktop-driver'), [], { stdio:['pipe','pipe','pipe'] });
 const pending = new Map(); let sequence = 0;
 createInterface({input:driver.stdout}).on('line', line=>{ const r=JSON.parse(line); const p=pending.get(r.id); if(p){ pending.delete(r.id);r.ok?p.resolve(r.data):p.reject(Error(JSON.stringify(r.error))); }});

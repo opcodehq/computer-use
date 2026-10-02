@@ -1,7 +1,9 @@
 # CLI computer preview
 
-On macOS, captured frames appear in a borderless floating panel. The panel contains
-the image at rest. Hover reveals a glass Opcode bar with a × cancel button.
+On macOS, captured frames appear in a borderless floating panel: the image inside a
+thin glass rim, crossfading between frames. Hover reveals two glass capsules, an
+Opcode pill with a live dot and a × cancel button. On macOS 26 these use native
+Liquid Glass; earlier systems use a HUD material.
 The button cancels in-flight input, pauses the session, and hides the panel.
 There is no system title bar, status text, Accessibility wireframe, or action overlay. Drag the image to move the panel. It follows the image's aspect
 ratio and stays visible across Spaces without activating the controlled app.
@@ -29,10 +31,13 @@ open a native popup on your local Mac. The Electron app has a separate interface
 
 ## Mac permissions
 
-`cu permission` and `cu capture-permission` open a native Opcode guide. Drag its
-app card into the matching System Settings list and enable the switch. Open
-Settings and Show in Finder are alternatives to dragging. An animated cue respects
-Reduce Motion; permission status comes from the helper, not the guide process.
+`cu permission` and `cu capture-permission` open the matching System Settings pane,
+then attach a glass strip to the bottom of the Settings window, on whichever
+display that window is. Drag the Opcode row from the strip into the list above it
+and turn on the switch. The strip follows the Settings window, hides while that
+window is on another Space or minimized, and closes after access is granted or
+Settings quits. The ‹ button reopens the pane. The arrow cue respects Reduce Motion;
+permission status comes from the helper, not the guide process.
 If macOS requests a restart, finish active sessions and run `cu helper-restart`.
 
 Opcode uses a monochrome “op” app mark. Its existing bundle ID and on-disk helper
