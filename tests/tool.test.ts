@@ -104,7 +104,13 @@ test('named keyboard actions require fresh state and reject arbitrary key string
 });
 
 test('pointer fallback requires observed bounds and never calls Jev', async () => {
-  const { tool, calls } = fixture(async () => { throw new Error('Must not call Jev'); });
+  const calls: string[] = [];
+  const tool = new DesktopTool(async method => {
+    calls.push(method);
+    if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+    if (method === 'snapshot') return { ...snapshot, nodes: [{ ...snapshot.nodes[0], actions: ['backgroundClick'] }] };
+    return {};
+  }, async () => { throw new Error('Must not call Jev'); });
   await tool.call('observe', { app: 'Calculator' });
   await assert.rejects(tool.call('click', { app: 'Calculator', snapshotId: 's1', ref: 's1:0' }), /visible actionable ref/);
   assert.ok(!calls.includes('execute'));
@@ -147,7 +153,7 @@ test('background pointer dispatch is window-routed without cursor animation or J
   let sent: Record<string, unknown> | undefined;
   const tool = new DesktopTool(async (method, args) => {
     if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
-    if (method === 'snapshot') return { ...snapshot, nodes: [{ ...snapshot.nodes[0], frame: { x: 1, y: 2, width: 30, height: 20 } }] };
+    if (method === 'snapshot') return { ...snapshot, nodes: [{ ...snapshot.nodes[0], actions: ['backgroundClick'], frame: { x: 1, y: 2, width: 30, height: 20 } }] };
     sent = args; return {};
   }, async () => { throw new Error('Must not call Jev'); });
   await tool.call('observe', { app: 'Calculator' });
@@ -298,4 +304,75 @@ test('launch resolves an exact installed app and does not invoke inference or sh
   const result = await tool.call('launch', { app: 'Test App' }) as any;
   assert.equal(result.launch.active, false);
   assert.deepEqual(calls.at(-1), ['launchApp', { appId: 'test.app' }]);
+});
+
+test('background click uses AXPress without requiring screen geometry or a pointer', async () => {
+  const sent: unknown[] = [];
+  const tool = new DesktopTool(async (method, args) => {
+    if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+    if (method === 'snapshot') return snapshot;
+    sent.push(args?.action);
+    if ((args?.action as { kind: string }).kind !== 'press') throw Object.assign(new Error('Off screen'), { code: 'WindowOffScreen', delivery: 'notDispatched' });
+    return {};
+  });
+  await tool.call('observe', { app: 'Calculator' });
+  const result = await tool.call('click', { app: 'Calculator', snapshotId: 's1', ref: 's1:0' });
+  assert.deepEqual(sent, [{ kind: 'press', ref: 's1:0' }]);
+  assert.equal(Reflect.get(result as object, 'status'), 'dispatchedUnverified');
+});
+
+test('off-screen pointer refusal returns fresh semantic recovery without dispatching another action', async () => {
+  let reads = 0, attempts = 0;
+  const tool = new DesktopTool(async method => {
+    if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+    if (method === 'snapshot') {
+      reads++;
+      return { ...snapshot, id: `s${reads}`, nodes: [{ ...snapshot.nodes[0], ref: `s${reads}:0`, frame: { x: 1, y: 2, width: 30, height: 20 } }] };
+    }
+    attempts++;
+    throw Object.assign(new Error('Off screen'), { code: 'WindowOffScreen', delivery: 'notDispatched' });
+  });
+  await tool.call('observe', { app: 'Calculator' });
+  const result = await tool.call('pointer', { app: 'Calculator', snapshotId: 's1', ref: 's1:0', gesture: 'rightClick' }) as { status: string; dispatched: boolean; snapshot: { id: string }; recovery: { actions: unknown[] } };
+  assert.equal(result.status, 'recoveryRequired');
+  assert.equal(result.dispatched, false);
+  assert.equal(result.snapshot.id, 's2');
+  assert.deepEqual(result.recovery.actions, [{ ref: 's2:0', operation: 'press' }]);
+  assert.equal(attempts, 1);
+});
+
+test('off-screen recovery never retries uncertain input or reuses refs after failed refresh', async () => {
+  for (const delivery of ['unknown', 'notDispatched']) {
+    let reads = 0, attempts = 0;
+    const tool = new DesktopTool(async method => {
+      if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+      if (method === 'snapshot') {
+        if (++reads > 1) throw new Error('AX unavailable');
+        return { ...snapshot, nodes: [{ ...snapshot.nodes[0], actions: ['backgroundClick'], frame: { x: 1, y: 2, width: 30, height: 20 } }] };
+      }
+      attempts++;
+      throw Object.assign(new Error('Off screen'), { code: 'WindowOffScreen', delivery });
+    });
+    await tool.call('observe', { app: 'Calculator' });
+    const result = await tool.call('click', { app: 'Calculator', snapshotId: 's1', ref: 's1:0' }) as { status: string; recovery?: { actions: unknown[] } };
+    assert.equal(result.status, delivery === 'unknown' ? 'outcomeUnknown' : 'recoveryRequired');
+    if (delivery === 'notDispatched') assert.deepEqual(result.recovery?.actions, []);
+    await assert.rejects(tool.call('click', { app: 'Calculator', snapshotId: 's1', ref: 's1:0' }), /Stale snapshot/);
+    assert.equal(attempts, 1);
+  }
+});
+
+test('off-screen AXPress click recovers semantically while visible pointer fallback stays available', async () => {
+  for (const windowOnScreen of [false, true]) {
+    let kind: unknown;
+    const tool = new DesktopTool(async (method, args) => {
+      if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+      if (method === 'snapshot') return { ...snapshot, windowOnScreen, nodes: [{ ...snapshot.nodes[0], frame: { x: 1, y: 2, width: 30, height: 20 } }] };
+      kind = (args?.action as { kind: string }).kind;
+      return {};
+    });
+    await tool.call('observe', { app: 'Calculator' });
+    await tool.call('click', { app: 'Calculator', snapshotId: 's1', ref: 's1:0' });
+    assert.equal(kind, windowOnScreen ? 'backgroundClick' : 'press');
+  }
 });

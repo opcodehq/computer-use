@@ -101,6 +101,29 @@ export class DesktopTool {
         pinnedWindow = snapshot.windowId;
         return snapshot;
       };
+      // Only a confirmed pre-dispatch visibility refusal permits this recovery.
+      // Return fresh alternatives to the host; never substitute a different gesture.
+      const recoverOffScreen = async (error: unknown) => {
+        if (!(error instanceof Error) || !('code' in error) || error.code !== 'WindowOffScreen' ||
+            !('delivery' in error) || error.delivery !== 'notDispatched') throw error;
+        this.progress('observing');
+        let snapshot: Snapshot | undefined;
+        let observationError: string | undefined;
+        try { snapshot = await observe(); }
+        catch { signal?.throwIfAborted(); observationError = 'Accessibility refresh failed. Retry observation or inspect windows before selecting another action.'; }
+        const actions = (snapshot?.nodes ?? []).filter(node => node.enabled && node.value !== '[secure]' &&
+          node.role !== 'AXSecureTextField').flatMap(node =>
+          ['AXPress', 'setValue', 'insertText'].filter(action => node.actions.includes(action)).map(action =>
+            ({ ref: node.ref, operation: action === 'AXPress' ? 'press' : action })));
+        this.remember({ event: 'action', outcome: 'pointerUnavailable', delivery: 'notDispatched' });
+        return {
+          status: 'recoveryRequired', dispatched: false, code: 'WindowOffScreen', delivery: 'notDispatched',
+          message: 'This pointer action requires a window on the current desktop. Accessibility actions may still work on this window.',
+          recovery: { route: 'accessibility', actions,
+            next: 'Continue the same goal using a matching fresh Accessibility control and execute, then verify the result. These are available operations, not equivalent replacements for the failed gesture. Supply exact text for text operations. Ask to move the window only if the required interaction has no supported semantic route. Do not activate the app or switch Spaces automatically.' },
+          ...(snapshot ? { snapshot } : {}), ...(observationError ? { observationError } : {}), timingMs: timings(),
+        };
+      };
       if (name === 'capture') {
         const snapshot = await observe();
         const image = Schema.decodeUnknownSync(Schema.Struct({ base64: Schema.String, width: Schema.Number, height: Schema.Number }))(await request('screenshot', { snapshotId: snapshot.id }));
@@ -138,7 +161,9 @@ export class DesktopTool {
         if (!node || !args.gesture || (args.gesture==='drag'&&!destination)) throw new Error('Pointer action requires fresh visible refs and a gesture.');
         const candidate: Candidate={id:'pointer',description:args.gesture,action:{kind:args.gesture,ref:node.ref,...(destination?{targetRef:destination.ref}:{})}};
         this.latest=undefined;this.progress('acting',candidate,before);
-        const result=await request('execute',{snapshotId:before.id,action:candidate.action});
+        let result: unknown;
+        try { result=await request('execute',{snapshotId:before.id,action:candidate.action}); }
+        catch (error) { return await recoverOffScreen(error); }
         this.progress('observing');return {status:'dispatchedUnverified',result,snapshot:await observe()};
       }
       if (name === 'input') {
@@ -156,7 +181,7 @@ export class DesktopTool {
       if (name !== 'type' && operation === 'press' && args.text !== undefined) throw new Error('Use setValue or insertText with text.');
       const namedKeys = ['Escape','Tab','Shift+Tab','Option+Tab','Option+Shift+Tab','Enter','Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Backspace','Home','End','PageUp','PageDown','Meta+A'];
       if (name === 'key' && !namedKeys.includes(args.key ?? '')) throw new Error('Unsupported named key.');
-      const clicked = name === 'click' ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.frame && node.actions.length > 0) : undefined;
+      const clicked = name === 'click' ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.role !== 'AXSecureTextField' && (node.frame || (this.interactionMode === 'background' && node.actions.includes('AXPress'))) && node.actions.length > 0) : undefined;
       if (name === 'click' && !clicked) throw new Error('Click requires a visible actionable ref from the latest snapshot.');
       const keyboardTarget = ['key', 'type'].includes(name) && (name === 'type' || this.interactionMode === 'background')
         ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.focused && (name === 'key' ? node.role !== 'AXWindow' && node.actions.length > 0 : ['AXTextField','AXTextArea','AXComboBox', ...(before.source === 'visual' ? ['VisualKeyboard'] : [])].includes(node.role))) : undefined;
@@ -164,7 +189,7 @@ export class DesktopTool {
       if (name === 'type' && (!args.text || args.text.length > 8000)) throw new Error('Supply 1–8000 characters of exact text.');
       let candidates: Candidate[];
       if (clicked) {
-        candidates = [{ id: 'click', description: `Click ${clicked.role}: ${clicked.name}`, action: { kind: clicked.actions.includes('visualClick') ? 'visualClick' : this.interactionMode === 'background' ? 'backgroundClick' : 'clickElement', ref: clicked.ref } }];
+        candidates = [{ id: 'click', description: `Click ${clicked.role}: ${clicked.name}`, action: { kind: this.interactionMode === 'background' && clicked.actions.includes('AXPress') && (before.windowOnScreen === false || !clicked.frame) ? 'press' : clicked.actions.includes('visualClick') ? 'visualClick' : this.interactionMode === 'background' ? 'backgroundClick' : 'clickElement', ref: clicked.ref } }];
       } else if (keyboardTarget) {
         candidates = [{ id: 'keyboard', description: `${name === 'type' ? 'Type text' : `Press ${args.key}`} in ${keyboardTarget.name}`, action: { kind: name === 'type' ? before.source === 'visual' ? 'insertText' : 'backgroundText' : 'backgroundKey', ref: keyboardTarget.ref, text: name === 'type' ? args.text : args.key } }];
       } else if (name === 'key') {
@@ -208,6 +233,7 @@ export class DesktopTool {
       let uncertain = false;
       try { delivery = await request('execute', { snapshotId: before.id, action: selected.action, animate: this.interactionMode === 'foreground' && args.animate === true }); }
       catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'WindowOffScreen' && 'delivery' in error && error.delivery === 'notDispatched') return await recoverOffScreen(error);
         if (!(error instanceof Error) || !('delivery' in error) || !['unknown', 'dispatchedUnverified'].includes(String(error.delivery))) { this.remember({ event: 'action', action: actionSummary, outcome: 'refused' }); throw error; }
         uncertain = true;
         delivery = { delivery: 'unknown', message: error.message };

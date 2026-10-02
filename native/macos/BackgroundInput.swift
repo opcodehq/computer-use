@@ -41,6 +41,14 @@ final class BackgroundInput {
         guard let windows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else { return nil }
         return windows.contains { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == id }
     }
+    private func requireOnScreen(_ windowID: CGWindowID) throws {
+        guard let onScreen = isOnScreen(windowID) else {
+            throw DriverFailure(code: "BackgroundUnavailable", message: "WindowServer visibility query failed. No input sent.")
+        }
+        guard onScreen else {
+            throw DriverFailure(code: "WindowOffScreen", message: "This pointer route requires the current desktop. No input sent. Observe and use supported Accessibility press or text actions before asking to move the window; no Space switch attempted.")
+        }
+    }
     func supportsPointer() -> Bool {
         symbol(sky, "SLEventPostToPid", PostFunction.self) != nil &&
         symbol(sky, "CGEventSetWindowLocation", LocalPointFunction.self) != nil &&
@@ -91,12 +99,7 @@ final class BackgroundInput {
               window[kCGWindowLayer as String] as? Int == 0 else {
             throw DriverFailure(code: "StaleTarget", message: "Window ownership changed before background dispatch.")
         }
-        guard let onScreen = isOnScreen(windowID) else {
-            throw DriverFailure(code: "BackgroundUnavailable", message: "WindowServer visibility query failed. No input sent.")
-        }
-        guard onScreen else {
-            throw DriverFailure(code: "WindowOffScreen", message: "The target window is absent from WindowServer's current on-screen list. This does not mean the app is unresponsive. No input sent and no Space switch attempted.")
-        }
+        try requireOnScreen(windowID)
         let source = CGEventSource(stateID: .privateState)
         let group = Int64.random(in: 1...Int64(Int32.max))
         // Construct the entire sequence before dispatch; never retry a sent event.
@@ -130,10 +133,10 @@ final class BackgroundInput {
               point.x.isFinite, point.y.isFinite, end.x.isFinite, end.y.isFinite,
               frame.contains(point), frame.contains(end),
               let window = windowInfo(windowID),
-              window[kCGWindowOwnerPID as String] as? Int == Int(pid),
-              isOnScreen(windowID) == true else {
-            throw DriverFailure(code: "BackgroundUnavailable", message: "Gesture requires an on-screen window with exact ownership and geometry.")
+              window[kCGWindowOwnerPID as String] as? Int == Int(pid) else {
+            throw DriverFailure(code: "BackgroundUnavailable", message: "Gesture requires exact window ownership and geometry.")
         }
+        try requireOnScreen(windowID)
         let source = CGEventSource(stateID: .privateState)
         let right = kind == "rightClick"
         let button: CGMouseButton = right ? .right : .left

@@ -11,7 +11,7 @@ obtain fresh refs before using exact-ref recovery commands.
 | Partial observation | Use `windows` to choose the right window, or increase `nodeLimit`. Use visual observation only if AX omits the needed control. |
 | Stale ref | Observe in the current helper and select again; preserve the task goal. |
 | `UserActiveInTarget` | An active task can wait for the user to leave the app. Keep the run alive; do not launch competing inputs. |
-| `WindowOffScreen` | Explain that the target window must be unminimized on the current desktop; never switch Spaces or activate it behind the user's back. |
+| `WindowOffScreen` | A pointer route is unavailable, not the entire app. Use the returned fresh snapshot or observe again. Continue with a matching `AXPress` (`execute --operation press`), `setValue`, or `insertText` control and verify. An off-screen background `click` on an AXPress control chooses semantic delivery automatically. Do not substitute press for right-click or drag unless it achieves the intended goal. Ask to move the window only after the necessary interaction has no usable semantic route; never switch Spaces or activate it automatically. |
 | Unknown delivery / disconnect | Observe before deciding whether anything remains. Never blindly replay a save, submit, or creation. |
 | No progress / repeated state | Inspect whether the previous action worked. Try another observed supported route; do not restart already completed setup. |
 | Login, verification, secure input, unsupported upload | State exactly which human input or driver capability is missing. Do not invent values or bypass a verification. |

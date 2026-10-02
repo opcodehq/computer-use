@@ -64,7 +64,11 @@ acting. Use `--no-preview` on the first helper call, or `cu mcp --no-preview`, f
 quiet operation. A preview is not a separate desktop or VM.
 
 Preserve the user's work: background input must not activate apps, switch Spaces,
-move the hardware cursor, or bypass `WindowOffScreen` / `UserActiveInTarget`.
+move the hardware cursor, or bypass `UserActiveInTarget`.
+`WindowOffScreen` blocks pointer delivery only. Use the fresh recovery snapshot
+to continue through supported Accessibility actions; see
+[recovery.md](references/recovery.md). Request window movement only when the
+required operation has no usable semantic route.
 Avoid concurrent control of the same app. An unknown-delivery error means the
 last action may have happened; observe before deciding whether to retry.
 Capture only to resolve a real visual ambiguity unless the user requested ongoing

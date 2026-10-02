@@ -1,6 +1,6 @@
 {
   "name": "@opcodehq/cu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "packageManager": "bun@1.3.10",
   "trustedDependencies": [
