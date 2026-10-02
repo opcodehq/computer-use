@@ -24,7 +24,7 @@ final class PreviewCanvas: NSView {
     }
     override func draw(_ dirtyRect: NSRect) {
         NSColor(calibratedWhite: 0.10, alpha: 1).setFill(); bounds.fill()
-        guard let frame = rect(packet["frame"]) else {
+        guard let frame = rect(packet["frame"]) ?? image.map({ NSRect(origin: .zero, size: $0.size) }) else {
             drawLabel("Waiting for app observation", at: NSPoint(x: 20, y: 25), color: .lightGray); return
         }
         let scale = min((bounds.width-24)/frame.width, (bounds.height-24)/frame.height)
@@ -74,7 +74,7 @@ final class PreviewDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.title = "CU · Computer"; panel.level = .floating; panel.hidesOnDeactivate = false; panel.becomesKeyOnlyIfNeeded = true
         panel.standardWindowButton(.closeButton)?.setAccessibilityLabel("Hide preview")
         panel.minSize = NSSize(width:360,height:280); panel.delegate = self
-        panel.collectionBehavior = [.fullScreenAuxiliary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         guard let content = panel.contentView else { return }
         content.wantsLayer = true; content.layer?.backgroundColor = NSColor(calibratedWhite:0.09,alpha:1).cgColor
         title.textColor = .white; message.textColor = .lightGray

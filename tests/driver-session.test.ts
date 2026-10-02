@@ -50,3 +50,23 @@ test('preview stopped during opening cannot dispatch, and no-preview persists fo
   await quiet.call('observe',{'no-preview':true});await quiet.call('observe',{});
   assert.equal(opens,0);await session.close();await quiet.close();
 });
+
+test('browser-only CLI session opens preview and reports activity', async()=>{
+  let opens=0; const events: Event[]=[];
+  const session=new DriverSession(async()=>({pageId:'p'}),async()=>{opens++;return {send:event=>events.push(event),close:async()=>{}};});
+  await session.call('browser',{operation:'open'});
+  await session.call('browser',{operation:'observe'});
+  assert.equal(opens,1);
+  assert.ok(events.some(event=>event.state==='waiting'));
+  await session.close();
+});
+
+test('preview command reopens a hidden panel without dispatching input', async()=>{
+  let opens=0,closes=0,calls=0;
+  const session=new DriverSession(async()=>{calls++;return snapshot;},async()=>{opens++;return {send:()=>{},close:async()=>{closes++;}};});
+  await session.call('observe',{});
+  const result=await session.call('preview',{});
+  assert.equal(opens,2);assert.equal(closes,1);assert.equal(calls,1);
+  assert.equal((result as {visible:boolean}).visible,true);
+  await session.close();
+});

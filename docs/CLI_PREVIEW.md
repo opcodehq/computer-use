@@ -48,3 +48,15 @@ with preview discovery and independently persisted results. The subsequent nativ
 pointer-invariance test was inconclusive because the hardware cursor moved during
 the measurement. Mac testing was then paused at the user's request. Later native
 styling and app-launch readiness changes still require Mac verification.
+
+### Persistent CLI preview
+
+Use the same `--session NAME` across calls to keep the panel alive between commands.
+A standalone command closes its panel when the command exits. Browser-only sessions
+also open the Mac panel automatically, with a local browser frame after each command.
+The panel appears across Spaces without activating the target app.
+
+To reopen a panel you hid, run `cu preview --session NAME`. This does not resume
+paused input. Use `cu stop --session NAME` when finished. If the preview helper is
+missing, run `cu install`. On Linux, use `cu viewer --session NAME` and open its
+private viewer URL; a cloud machine cannot open a native popup on your local Mac.

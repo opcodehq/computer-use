@@ -73,6 +73,7 @@ Your agent plans and calls these tools using its existing login. No CU model key
 
   browser --session NAME --input-json '{"operation":"open"}'
                                 Session-owned tabs, frames, dialogs and file transfers
+  preview --session NAME        Show the Mac session preview
   viewer --session NAME [--app APP]
                                 Live stream, read-only sharing, Stop and takeover
 
@@ -226,7 +227,18 @@ browser.activity=(message,pointer)=>viewer?.activity(message,pointer);
 const { tool: nativeTool, close: closeNative } = createDesktopTool(binary, event => { if(event.snapshot) target=event.snapshot; tool.event(event); });
 const tool: DriverSession = new DriverSession(async(method,args,signal): Promise<unknown>=>{
   if(method==='inspect') { browserView=Boolean(args.pageId)||args.route==='browser'; return inspectSurface((m,a,s)=>nativeTool.call(m,a,s),(_m,a,s)=>browser.call(a,s),args,signal); }
-  if(method==='browser') { browserView=true; return browser.call(args,signal); }
+  if(method==='browser') {
+    browserView=true;
+    const result=await browser.call(args,signal);
+    if(tool.hasPreview) {
+      // Preview failure must never change a successfully delivered action's result.
+      try {
+        const image=await browser.capture();
+        tool.event({state:'waiting',message:'Browser observation',image:image.toString('base64'),imageFrame:{x:0,y:0,width:image.readUInt32BE(16),height:image.readUInt32BE(20)}});
+      } catch { /* Closed pages and open dialogs may not provide a frame. */ }
+    }
+    return result;
+  }
   if(method==='viewer') {
     if(args.app){browserView=false;target=await nativeTool.call('observe',args,signal) as Snapshot;}
     viewer ??= new DesktopViewer({
