@@ -46,9 +46,9 @@ final class VisualDetector {
                     try process.run()
                     let timeout = DispatchWorkItem { if process.isRunning { process.terminate() } }
                     DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: timeout)
-                    defer { timeout.cancel() }
-                    input.fileHandleForWriting.write(png); try? input.fileHandleForWriting.close()
-                    let data = output.fileHandleForReading.readDataToEndOfFile()
+                    defer { timeout.cancel(); if process.isRunning { process.terminate() } }
+                    try input.fileHandleForWriting.write(contentsOf: png); try input.fileHandleForWriting.close()
+                    let data = try output.fileHandleForReading.readToEnd() ?? Data()
                     process.waitUntilExit()
                     guard process.terminationStatus == 0, data.count <= 2_000_000 else { throw DriverFailure(code: "VisionUnavailable", message: "Local ONNX perception failed or timed out.") }
                     return data
@@ -67,7 +67,9 @@ final class VisualDetector {
             do {
                 if cachedPath != path || cachedModel == nil {
                     let url = URL(fileURLWithPath: path)
-                    let compiled = url.pathExtension == "mlmodelc" ? url : try MLModel.compileModel(at: url)
+                    let compiled: URL
+                    if url.pathExtension == "mlmodelc" { compiled = url }
+                    else { compiled = try await MLModel.compileModel(at: url) }
                     if let previous = compiledURL { try? FileManager.default.removeItem(at: previous) }
                     compiledURL = compiled != url ? compiled : nil
                     let config = MLModelConfiguration(); config.computeUnits = .all

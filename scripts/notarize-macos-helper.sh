@@ -5,7 +5,7 @@ cu_helper_app="${CU_HELPER_APP:-$HOME/Library/Application Support/Opcode/CU Driv
 cu_release_dir="${CU_RELEASE_DIR:-release}"
 mkdir -p "$cu_release_dir"
 codesign --verify --strict "$cu_helper_app"
-if ! codesign -dv --verbose=2 "$cu_helper_app" 2>&1 | rg -q 'Authority=Developer ID Application:'; then
+if ! codesign -dv --verbose=2 "$cu_helper_app" 2>&1 | /usr/bin/grep -q 'Authority=Developer ID Application:'; then
   echo 'Rebuild with CU_CODESIGN_IDENTITY set to your Developer ID Application identity before notarizing.' >&2
   exit 1
 fi
