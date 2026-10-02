@@ -11,6 +11,7 @@
         "@ai-sdk/openai-compatible": "3.0.62",
         "@anthropic-ai/sdk": "0.126.0",
         "@effect/platform-node": "4.0.0-beta.98",
+        "@effect/platform-node-shared": "4.0.0-beta.98",
         "@modelcontextprotocol/sdk": "1.30.0",
         "@tesseract.js-data/eng": "1.0.0",
         "@typesafe-ai/sdk": "0.6.0",

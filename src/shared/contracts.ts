@@ -17,8 +17,8 @@ export const SnapshotSchema = Schema.Struct({
 });
 export type Snapshot = typeof SnapshotSchema.Type;
 export const ActionSchema = Schema.Struct({
-  kind: Schema.Literals(['visualClick', 'press', 'focus', 'setValue', 'insertText', 'key', 'click', 'clickElement', 'backgroundClick', 'backgroundKey', 'backgroundText', 'navigate']),
-  ref: Schema.optional(Schema.String), text: Schema.optional(Schema.String),
+  kind: Schema.Literals(['doubleClick', 'rightClick', 'hover', 'drag', 'visualClick', 'press', 'focus', 'setValue', 'insertText', 'key', 'click', 'clickElement', 'backgroundClick', 'backgroundKey', 'backgroundText', 'navigate']),
+  targetRef: Schema.optional(Schema.String), ref: Schema.optional(Schema.String), text: Schema.optional(Schema.String),
   x: Schema.optional(Schema.Number), y: Schema.optional(Schema.Number),
 });
 export type Action = typeof ActionSchema.Type;

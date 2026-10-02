@@ -38,10 +38,11 @@ const error = (
   code = "InvalidRequest",
   delivery = "notDispatched",
 ) => Object.assign(new Error(message), { code, delivery });
-async function command(args: string[]) {
+async function command(args: string[], delivery = "isolated") {
   return (
     await exec(helper, args, {
       encoding: "buffer",
+      env: { ...process.env, CU_INPUT_DELIVERY: delivery },
       maxBuffer: 128 * 1024 * 1024,
       timeout: 15000,
     })
@@ -254,10 +255,16 @@ async function dispatch(r: Record<string, any>) {
     if (r.method === "execute") {
       const node = c.snapshot.nodes.find((n) => n.ref === a.ref);
       if (!node) throw error("Unknown ref.", "StaleTarget");
-      if (kind === "visualClick" && node.frame) {
+      if (["visualClick","doubleClick","rightClick","hover","drag"].includes(kind) && node.frame) {
         x = node.frame.x - c.window.x + node.frame.width / 2;
         y = node.frame.y - c.window.y + node.frame.height / 2;
-        kind = "click";
+        if(kind === "visualClick") kind = "click";
+        if(kind === "drag") {
+          const destination=c.snapshot.nodes.find(n=>n.ref===a.targetRef&&n.enabled&&n.value!=="[secure]"&&n.frame);
+          if(!destination?.frame) throw error("Unknown drag target.","StaleTarget");
+          a.toX=destination.frame.x-c.window.x+destination.frame.width/2;
+          a.toY=destination.frame.y-c.window.y+destination.frame.height/2;
+        }
       } else if (kind === "insertText" && node.role === "VisualKeyboard")
         kind = "type";
       else if (kind === "backgroundKey" && node.role === "VisualKeyboard")
@@ -265,7 +272,7 @@ async function dispatch(r: Record<string, any>) {
       else throw error("Unsupported Linux ref action.");
     }
     let args: string[];
-    if (kind === "click") {
+    if (["click", "doubleClick", "rightClick", "hover", "drag"].includes(kind)) {
       if (
         ![x, y].every(Number.isFinite) ||
         x < 0 ||
@@ -275,11 +282,15 @@ async function dispatch(r: Record<string, any>) {
       )
         throw error("Click outside captured window.");
       args = [
-        "click",
+        kind,
         String(c.window.id),
         String(Math.floor(x)),
         String(Math.floor(y)),
       ];
+      if (kind === "drag") {
+        if (![a.toX,a.toY].every(Number.isFinite) || a.toX<0 || a.toY<0 || a.toX>=c.window.width || a.toY>=c.window.height) throw error("Drag endpoint outside captured window.");
+        args.push(String(Math.floor(a.toX)),String(Math.floor(a.toY)));
+      }
     } else if (kind === "type") {
       if (
         typeof text !== "string" ||
@@ -303,6 +314,9 @@ async function dispatch(r: Record<string, any>) {
         );
       args = ["scroll", String(c.window.id), String(a.amount)];
     } else throw error("Supported input: click, type, key, scroll.");
+    const delivery = a.delivery ?? "isolated";
+    if (!["isolated","background"].includes(delivery)) throw error("Unknown input delivery.");
+    if (delivery === "background" && !["click","doubleClick","rightClick","hover","drag"].includes(kind)) throw error("Background keyboard and scroll require a semantic browser route.", "Unsupported");
     // Bind input to the image the agent inspected, allowing only small cursor/caret changes.
     const before = await sharp(c.png)
       .resize(96, 64)
@@ -324,7 +338,7 @@ async function dispatch(r: Record<string, any>) {
       );
     current = undefined;
     try {
-      await command(args);
+      await command(args, delivery);
     } catch {
       throw error(
         "Input delivery is unknown; observe before retrying.",
@@ -333,7 +347,7 @@ async function dispatch(r: Record<string, any>) {
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 180));
-    return { delivery: "dispatchedUnverified" };
+    return { delivery: "dispatchedUnverified", inputRoute: delivery === "background" ? "x11-send-event" : "isolated-xtest", acceptedByApp: "unverified" };
   }
   if (r.method === "installedApps") return [];
   throw error("Unsupported Linux driver method: " + r.method, "Unsupported");

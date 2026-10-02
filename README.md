@@ -37,6 +37,28 @@ the first session call, or on `cu mcp`, for quiet operation.
 
 ## Install the CLI
 
+Install the npm CLI on macOS or Linux:
+
+```sh
+npm install -g @opcodehq/cu
+cu install
+cu doctor
+```
+
+The npm package requires Node.js 20+ and Bun 1.3.10+. `cu install` builds the
+native runtime in your user cache: macOS requires Xcode Command Line Tools;
+Linux requires a C compiler, X11/XTest development headers, and Xvfb. It does
+not run sudo or modify system packages. On Linux it also downloads a
+checksum-verified UI detection model; see [Linux setup](docs/LINUX_CLOUD.md)
+for system packages and model terms. Chrome/Chromium is required for browser tools.
+
+For an isolated Linux desktop, start your agent with `cu desktop -- YOUR_AGENT`.
+Use `cu config generic` for MCP configuration or `cu instructions` for CLI usage.
+No decision-model API key is needed. The npm package installs the CLI; run the
+Electron app from a source checkout during this beta.
+
+### Standalone bundles
+
 The standalone Mac bundle contains `jev`, the native driver, and harness skills.
 Users need **no Python, Node, Bun, Xcode, or source checkout** to run that bundle.
 Requires macOS 14+.
@@ -169,3 +191,9 @@ secrets, and `.context/` artifacts are also ignored.
 
 Run a separate Xvfb desktop with local YOLO/OCR and model-free CLI/MCP input.
 See [Linux cloud setup and the real desktop smoke test](docs/LINUX_CLOUD.md).
+
+## Pointer, browser and viewer tools
+
+Use `cu pointer` for ref-based gestures, `cu browser` for session-owned tabs, frames,
+dialogs and file transfers, and `cu viewer` for a live stream with read-only sharing
+and takeover. See [commands and platform limits](docs/WORKSPACE_TOOLS.md).

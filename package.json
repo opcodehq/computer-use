@@ -1,7 +1,6 @@
 {
   "name": "@opcodehq/cu",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "packageManager": "bun@1.3.10",
   "trustedDependencies": [
@@ -24,7 +23,9 @@
     "build:cli": "bun scripts/build-cli.mjs",
     "build:linux": "bun scripts/build-linux.mjs",
     "setup:linux": "bun scripts/setup-linux.mjs",
-    "desktop:linux": "bun scripts/desktop-linux.mjs"
+    "desktop:linux": "bun scripts/desktop-linux.mjs",
+    "prepack": "bun run build",
+    "test:npm": "bun scripts/test-npm-package.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.71",
@@ -42,7 +43,8 @@
     "playwright-core": "1.58.2",
     "sharp": "0.35.5",
     "tesseract.js": "7.0.0",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@effect/platform-node-shared": "4.0.0-beta.98"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -51,8 +53,45 @@
     "typescript": "^5.9.0"
   },
   "bin": {
-    "jev-desktop": "dist/cli.mjs",
-    "jev": "dist/cli.mjs",
-    "cu": "dist/cli.mjs"
-  }
+    "cu": "bin/cu.mjs",
+    "jev": "bin/cu.mjs",
+    "jev-desktop": "bin/cu.mjs"
+  },
+  "description": "Native computer-use CLI and MCP tools for existing coding agents, with browser automation and a live desktop viewer.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opcodehq/computer-use.git"
+  },
+  "homepage": "https://github.com/opcodehq/computer-use#readme",
+  "bugs": {
+    "url": "https://github.com/opcodehq/computer-use/issues"
+  },
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.3.10"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "src/linux/",
+    "native/linux/x11.c",
+    "native/macos/*.swift",
+    "scripts/install-runtime.mjs",
+    "scripts/build-linux.mjs",
+    "scripts/build-native.sh",
+    "scripts/setup-linux.mjs",
+    "scripts/desktop-linux.mjs",
+    ".agents/skills/jev-desktop/",
+    "docs/",
+    "VISION.md"
+  ]
 }

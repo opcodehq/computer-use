@@ -1,6 +1,6 @@
 ---
 name: jev-desktop
-description: Use the cu native computer driver from your existing agent to operate Mac apps, inspect controls, and test complete desktop workflows. No separate model or API key required for native tools.
+description: Use the cu native computer driver from your existing agent to operate Mac/Linux apps, automate browsers, inspect controls, and test complete desktop workflows. No separate model or API key required for native tools.
 ---
 
 <!-- jev-desktop:managed -->
@@ -14,8 +14,8 @@ CU supplies observations and delivers your actions. It does not need your model
 credentials for this path. `jev` remains a compatible command alias.
 
 If `cu` is absent from PATH, use the installed command at the end of this skill,
-or `bun dist/cli.mjs` in a source checkout. Commands run on the controlled Mac;
-a cloud harness needs its own Mac command bridge. See
+or `bun dist/cli.mjs` in a source checkout. Commands run on the controlled machine. Start Linux workflows inside
+`cu desktop -- YOUR_AGENT`; remote Mac workflows need a Mac command bridge. See
 [setup.md](references/setup.md) for installation and permission recovery.
 
 ## Run the user's whole workflow
@@ -77,3 +77,11 @@ that delegation route. They are not required to operate the driver and are not
 part of the default subscription-backed host-agent workflow. Their credentials
 and billing differ from the host's existing login. See
 [agents.md](references/agents.md) for that opt-in path and generic MCP configuration.
+
+## Browser workflows and Linux
+
+For website tasks, read [workspace.md](references/workspace.md) for session-owned
+browser tabs, frames, dialogs, uploads/downloads, native gestures, and live viewing.
+Browser observations and native observations have different refs; keep actions
+on the same route that produced their targets. On Linux, use an isolated desktop
+for keyboard and pointer input. Background native keyboard delivery is unsupported.

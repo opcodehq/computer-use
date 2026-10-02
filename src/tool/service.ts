@@ -69,8 +69,9 @@ export class DesktopTool {
         return { status: (launch as { ready?: boolean })?.ready === false ? 'launching' : 'launched', app: matches[0], launch, next: 'List windows and observe; launch alone does not verify a usable window.' };
       }
       if (name === 'permission') return await request('requestAccessibility');
-      if (!['capture', 'observe', 'wait', 'windows', 'act', 'execute', 'key', 'click', 'type', 'input'].includes(name)) throw new Error(`Unknown command: ${name}`);
+      if (!['capture', 'observe', 'wait', 'windows', 'act', 'execute', 'key', 'click', 'type', 'input', 'pointer'].includes(name)) throw new Error(`Unknown command: ${name}`);
       const args = Schema.decodeUnknownSync(Schema.Struct({
+        gesture: Schema.optional(Schema.Literals(['doubleClick','rightClick','hover','drag'])), targetRef: Schema.optional(Schema.String),
         outputPath: Schema.optional(Schema.String), action: Schema.optional(Schema.Unknown),
         candidateRefs: Schema.optional(Schema.Array(Schema.String)), expectedOutput: Schema.optional(Schema.String),
         outputOnly: Schema.optional(Schema.Boolean), waitText: Schema.optional(Schema.String), timeoutMs: Schema.optional(Schema.Number), match: Schema.optional(Schema.Literals(['contains','exactLine'])),
@@ -125,12 +126,21 @@ export class DesktopTool {
         } while (performance.now() < until);
         return { status: 'notObserved', dispatched: false, message: 'Expected text was not observed; this does not prove absence in a partial tree.', snapshot: snapshot! };
       }
-      const usesRefs = ['execute', 'key', 'click', 'type', 'input'].includes(name) || args.candidateRefs !== undefined;
+      const usesRefs = ['execute', 'key', 'click', 'type', 'input', 'pointer'].includes(name) || args.candidateRefs !== undefined;
       const before = usesRefs ? this.latest : await observe();
       if (!before || before.pid !== pid || (args.windowId !== undefined && before.windowId !== args.windowId) || (usesRefs && before.id !== args.snapshotId)) throw new Error('Stale snapshot. Observe this app again before executing an exact ref.');
       const scope = JSON.stringify([before.pid, before.windowId, before.title]);
       if (scope !== this.historyScope) { this.history = []; this.historyScope = scope; }
       if (name === 'observe') return before;
+      if (name === 'pointer') {
+        const node=before.nodes.find(n=>n.ref===args.ref && n.enabled && n.value!=='[secure]' && n.frame);
+        const destination=before.nodes.find(n=>n.ref===args.targetRef && n.enabled && n.value!=='[secure]' && n.frame);
+        if (!node || !args.gesture || (args.gesture==='drag'&&!destination)) throw new Error('Pointer action requires fresh visible refs and a gesture.');
+        const candidate: Candidate={id:'pointer',description:args.gesture,action:{kind:args.gesture,ref:node.ref,...(destination?{targetRef:destination.ref}:{})}};
+        this.latest=undefined;this.progress('acting',candidate,before);
+        const result=await request('execute',{snapshotId:before.id,action:candidate.action});
+        this.progress('observing');return {status:'dispatchedUnverified',result,snapshot:await observe()};
+      }
       if (name === 'input') {
         if (before.source !== 'visual') throw new Error('Raw input requires an isolated Linux visual session.');
         this.latest = undefined;

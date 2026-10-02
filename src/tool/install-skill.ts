@@ -2,7 +2,7 @@ import { access, mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/pro
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
-import { compiled, resourcePaths, shellQuote } from './runtime.js';
+import { compiled, cliInvocation, resourcePaths, shellQuote } from './runtime.js';
 
 export async function installHarnessSkill(client: string, runtime: string, entry: string, home = homedir(), directory?: string) {
   if (!['codex', 'claude', 'generic'].includes(client)) throw new Error('Choose codex, claude, or generic.');
@@ -25,7 +25,8 @@ export async function installHarnessSkill(client: string, runtime: string, entry
   await mkdir(join(destination, 'scripts'), { recursive: true });
   await mkdir(join(destination, 'references'), { recursive: true });
   for (const file of files) await writeFile(join(destination, 'references', file.name), file.content);
-  const command = [runtime, ...(!compiled ? [entry] : [])].map(shellQuote).join(' ');
+  const invocation = cliInvocation(entry, runtime);
+  const command = [invocation.command, ...invocation.args].map(shellQuote).join(' ');
   await writeFile(join(destination, 'SKILL.md'), content + `\nInstalled CLI (use if jev is absent from PATH): \`${command}\`\n`);
   const legacy = join(destination, 'scripts/jev.py');
   try {

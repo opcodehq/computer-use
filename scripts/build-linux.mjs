@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-await mkdir("native/linux/build", { recursive: true });
+const output=process.env.CU_NATIVE_DIR??resolve("native/linux/build");
+await mkdir(output, { recursive: true });
 execFileSync(
   "cc",
   [
@@ -11,13 +12,13 @@ execFileSync(
     "-lX11",
     "-lXtst",
     "-o",
-    "native/linux/build/cu-x11",
+    resolve(output,"cu-x11"),
   ],
   { stdio: "inherit" },
 );
 const quote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
 await writeFile(
-  "native/linux/build/desktop-driver",
+  resolve(output,"desktop-driver"),
   `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(resolve("src/linux/driver.ts"))}\n`,
   { mode: 0o755 },
 );

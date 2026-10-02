@@ -322,6 +322,28 @@ struct SavedElement {
             guard let text = action["text"] as? String else { throw DriverFailure(code: "InvalidRequest", message: "Missing keyboard payload.") }
             try backgroundInput.keyboard(pid: targetPID, windowID: expectedID, key: kind == "backgroundKey" ? text : nil, text: kind == "backgroundText" ? text : nil)
             result = .success
+        case "doubleClick", "rightClick", "hover", "drag":
+            let element = try target(action)
+            guard let window = targetWindow, let windowID = backgroundInput.windowID(window),
+                  let bounds = windowFrame(window), let frame = windowFrame(element), !frame.isEmpty,
+                  backgroundInput.belongs(element, to: window),
+                  string(element, "AXRole") != "AXSecureTextField", string(element, "AXSubrole") != "AXSecureTextField" else {
+                throw DriverFailure(code: "BackgroundUnavailable", message: "Gesture requires a fresh non-protected element inside the exact window.")
+            }
+            let point = CGPoint(x: frame.midX, y: frame.midY)
+            var end = point
+            if kind == "drag" {
+                guard let targetRef = action["targetRef"] as? String else { throw DriverFailure(code: "InvalidRequest", message: "Drag requires targetRef.") }
+                let destination = try target(["ref": targetRef])
+                guard backgroundInput.belongs(destination, to: window), let targetFrame = windowFrame(destination), !targetFrame.isEmpty,
+                      string(destination, "AXRole") != "AXSecureTextField", string(destination, "AXSubrole") != "AXSecureTextField" else {
+                    throw DriverFailure(code: "BackgroundUnavailable", message: "Drag destination does not belong to the observed window.")
+                }
+                end = CGPoint(x: targetFrame.midX, y: targetFrame.midY)
+            }
+            try backgroundInput.gesture(pid: targetPID, windowID: windowID, frame: bounds, point: point, end: end, kind: kind)
+            virtualCursor = end
+            result = .success
         case "backgroundClick":
             let element = try target(action)
             guard let window = targetWindow, let windowID = backgroundInput.windowID(window),

@@ -103,8 +103,9 @@ coordinates when the detector missed a target. YOLO boxes are proposed regions,
 not proof that a control is clickable or that an action succeeded. The host should
 verify outcomes and continue the whole workflow without asking about every step.
 
-There is no extra Linux Electron preview window yet. The host receives captures;
-a live embedded viewer in a cloud product needs an image stream/artifact transport.
+A live HTTP viewer is available through `cu viewer --session NAME`. It supports
+read-only sharing and takeover; see [workspace tools](WORKSPACE_TOOLS.md).
+Embedding it in a cloud product requires that product’s authenticated port tunnel.
 Do not pipe large base64 captures through a command bridge with a small output cap.
 
 ## Local vision and optional autonomous model loop

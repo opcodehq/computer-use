@@ -8,7 +8,7 @@ building and testing the protocol, not controlling native Mac apps.
 
 ## An existing coding-agent conversation
 
-Any agent with shell access to the controlled Mac can call `cu`. Any client with
+Any agent with shell access to the controlled machine can call `cu`. Any client with
 MCP stdio support can connect to `cu mcp`. Export the server configuration:
 
 ```sh

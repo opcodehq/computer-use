@@ -1,3 +1,12 @@
+# npm installation
+
+The npm CLI requires Node.js 20+ and Bun 1.3.10+. Install with
+`npm install -g @opcodehq/cu`, then `cu install`. The native build needs Xcode
+Command Line Tools on Mac, or a C compiler, X11/XTest headers and Xvfb on Linux.
+Linux setup downloads a pinned UI detection model. Chrome/Chromium is needed
+for browser tools. Start a Linux agent with `cu desktop -- YOUR_AGENT`.
+Run `cu doctor` to check native readiness. No model API key is required.
+
 # Setup and connection recovery
 
 With the standalone CLI installed on the controlled Mac:

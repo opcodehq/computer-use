@@ -17,6 +17,7 @@ function run(command, args) {
   if (result.error || result.status !== 0) throw new Error(`Build failed: ${command} (exit ${result.status})`);
 }
 run(process.execPath, ['build', '--compile', '--define', 'JEV_COMPILED=true', '--outfile', `${output}/bin/jev`, 'src/tool/cli.ts']);
+await cp(`${root}/node_modules/playwright-core`, `${output}/libexec/node_modules/playwright-core`, { recursive: true });
 await cp(`${root}/.agents/skills/jev-desktop`, `${output}/share/jev/skill`, { recursive: true });
 if (!testOnly) {
   run('bash', ['scripts/build-native.sh']);

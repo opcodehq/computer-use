@@ -121,4 +121,47 @@ final class BackgroundInput {
             if index < events.count - 1 { Thread.sleep(forTimeInterval: index == 0 ? 0.015 : (chromium && index == 2) ? 0.100 : (chromium && index == 1) ? 0.001 : 0.028) }
         }
     }
+    /// Rich gestures remain addressed to one owning process and window.
+    /// No global event tap, focus activation, or physical cursor warp is used.
+    func gesture(pid: pid_t, windowID: CGWindowID, frame: CGRect, point: CGPoint, end: CGPoint, kind: String) throws {
+        guard let post = symbol(sky, "SLEventPostToPid", PostFunction.self),
+              let local = symbol(sky, "CGEventSetWindowLocation", LocalPointFunction.self),
+              let field = symbol(sky, "SLEventSetIntegerValueField", FieldFunction.self),
+              point.x.isFinite, point.y.isFinite, end.x.isFinite, end.y.isFinite,
+              frame.contains(point), frame.contains(end),
+              let window = windowInfo(windowID),
+              window[kCGWindowOwnerPID as String] as? Int == Int(pid),
+              isOnScreen(windowID) == true else {
+            throw DriverFailure(code: "BackgroundUnavailable", message: "Gesture requires an on-screen window with exact ownership and geometry.")
+        }
+        let source = CGEventSource(stateID: .privateState)
+        let right = kind == "rightClick"
+        let button: CGMouseButton = right ? .right : .left
+        var sequence: [(CGEventType, CGPoint, Int64)] = [(.mouseMoved, point, 0)]
+        if kind == "drag" {
+            sequence.append((.leftMouseDown, point, 1))
+            for step in 1...24 {
+                let t = Double(step) / 24.0
+                sequence.append((.leftMouseDragged, CGPoint(x: point.x+(end.x-point.x)*t, y: point.y+(end.y-point.y)*t), 1))
+            }
+            sequence.append((.leftMouseUp, end, 1))
+        } else if kind != "hover" {
+            for count in 1...(kind == "doubleClick" ? 2 : 1) {
+                sequence.append((right ? .rightMouseDown : .leftMouseDown, point, Int64(count)))
+                sequence.append((right ? .rightMouseUp : .leftMouseUp, point, Int64(count)))
+            }
+        }
+        let group = Int64.random(in: 1...Int64(Int32.max))
+        let events = try sequence.map { type, location, count -> CGEvent in
+            guard let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: location, mouseButton: button) else {
+                throw DriverFailure(code: "BackgroundUnavailable", message: "Could not construct gesture.")
+            }
+            event.flags = []
+            for (key, value): (UInt32, Int64) in [(0,3),(1,count),(3,right ? 1 : 0),(7,3),(40,Int64(pid)),(51,Int64(windowID)),(58,group),(91,Int64(windowID)),(92,Int64(windowID))] { field(event,key,value) }
+            local(event,location.x-frame.minX,location.y-frame.minY)
+            return event
+        }
+        for event in events { post(pid,event); Thread.sleep(forTimeInterval: 0.012) }
+    }
+
 }

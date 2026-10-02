@@ -1,7 +1,7 @@
 # Command reference
 
 Call `jev` directly from the current harness shell.
-All commands execute on the controlled Mac. `--input-json` accepts structured
+All commands execute on the controlled machine. `--input-json` accepts structured
 arguments; keep secrets out of command lines and transcripts.
 
 ## Persistent helper
