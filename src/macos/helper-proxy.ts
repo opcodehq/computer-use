@@ -24,7 +24,7 @@ if (!socket) {
   if (result.status !== 0) throw new Error('Install the Mac helper with cu install.');
   for (let i = 0; i < 100 && !socket; i++) { await delay(100); try { socket = await open(); } catch {} }
 }
-if (!socket) throw new Error('Mac helper did not start. Run cu install, then check permissions for Opcode CU Driver.');
+if (!socket) throw new Error('Mac helper did not start. Run cu install, then check permissions for Opcode.');
 socket.on('error', () => { console.error('Mac helper disconnected; delivery may be unknown. Observe before retrying.'); process.exitCode = 1; });
 if (process.argv.includes('--shutdown')) {
   const timer = setTimeout(() => { socket!.destroy(); process.exitCode = 1; }, 5000);

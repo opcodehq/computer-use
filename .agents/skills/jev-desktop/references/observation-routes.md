@@ -66,7 +66,7 @@ cu capture-permission
 cu doctor
 ```
 
-Grant Accessibility and Screen Recording to **Opcode CU Driver**. The terminal
+Grant Accessibility and Screen Recording to **Opcode**. The terminal
 and Electron app are no longer the permission owner for this npm-installed path.
 If macOS asks for a restart, finish CU runs, run `cu helper-restart`, and start a
 new named session. The next native call launches the helper again. Setup does not

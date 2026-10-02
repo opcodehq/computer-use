@@ -2,10 +2,35 @@
 import Foundation
 import AppKit
 import Darwin
+import ApplicationServices
 
 /// LaunchServices owns this process, keeping capture and AX under one app identity.
 @main struct HelperMain {
     @MainActor static var busy = false
+    @MainActor static var guide: Process?
+    @MainActor static func showPermissionGuide(_ kind: String) {
+        if guide?.isRunning == true { guide?.terminate() }
+        let process = Process()
+        process.executableURL = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/permission-guide")
+        process.arguments = [Bundle.main.bundlePath, kind]
+        let pipe = Pipe()
+        process.standardInput = pipe
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return }
+        guide = process
+        Task { @MainActor in
+            defer { try? pipe.fileHandleForWriting.close() }
+            while process.isRunning {
+                let state = ["accessibility": AXIsProcessTrusted(), "screenRecording": CGPreflightScreenCaptureAccess()]
+                if var data = try? JSONSerialization.data(withJSONObject: state) {
+                    data.append(10)
+                    do { try pipe.fileHandleForWriting.write(contentsOf: data) } catch { break }
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+    }
     @MainActor static func reply(_ line: Data, driver: Driver) async -> Data {
         var id = ""
         var result: [String: Any]
@@ -18,9 +43,11 @@ import Darwin
             if request["method"] as? String == "helperShutdown" { exit(0) }
             busy = true
             defer { busy = false }
+            if request["method"] as? String == "requestAccessibility" { showPermissionGuide("accessibility") }
+            if request["method"] as? String == "requestScreenRecording" { showPermissionGuide("screenRecording") }
             var value = try await driver.handle(request)
             if request["method"] as? String == "status", var status = value as? [String: Any] {
-                status["permissionOwner"] = "Opcode CU Driver"
+                status["permissionOwner"] = "Opcode"
                 status["helperBundleID"] = Bundle.main.bundleIdentifier ?? ""
                 value = status
             }
