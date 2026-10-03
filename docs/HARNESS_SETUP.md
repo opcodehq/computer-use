@@ -8,6 +8,11 @@ Exact native tools work without a TypeSafe key; Jev is optional.
 `cu task --provider NAME --model ID` runs full workflows through Vercel AI SDK;
 `cu providers` lists the built-in provider routes and credential variables.
 
+For shared Mac/Linux desktops, remote SSH/HTTPS access, and multiplayer, use
+the npm CLI’s `cu desktop-api` commands. The standalone bundle described below
+does not include those commands. See [shared desktop setup](DESKTOP_SERVICE.md)
+and [Mac setup](MAC_DESKTOP.md).
+
 ## First installation
 
 Install an extracted standalone Mac bundle with its `install.sh`, then:
@@ -89,7 +94,7 @@ subscription-backed agent to use native computer tools.
 | Symptom | Fix |
 | --- | --- |
 | Setup exits 2 | Installation succeeded but required readiness checks remain. Follow the printed fixes and rerun `jev doctor`. |
-| No Mac / Linux platform | Run through the harness's existing Mac command bridge or use a local Mac harness. Installing locally in the cloud is insufficient. |
+| Mac semantic tools from Linux/cloud | Run semantic commands through a Mac shell/command bridge, or use the separate `cu desktop-api` SSH/HTTPS workflow for shared desktop capture and input. The target Mac must run its helper and broker. |
 | Accessibility missing | Request it from the same command host that will run Jev; grant the host macOS identifies and restart it if requested. |
 | Key missing after saving | Check the command host's user and `JEV_SETTINGS_PATH`; the app and shell must read the same settings file. |
 | Capture works in Electron but fails from CLI | Screen Recording grants may differ by host. Grant the actual terminal/agent host for visual tasks. |

@@ -3,6 +3,7 @@ export const VERSION = 1;
 export const scopes = [
   "observe",
   "viewer-read",
+  "presence",
   "input-control",
   "recording-start",
   "recording-read",
@@ -61,7 +62,11 @@ export const Action = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("launch"),
-    appId: z.string().regex(/^[a-zA-Z0-9_.-]+\.desktop$/),
+    appId: z
+      .string()
+      .min(1)
+      .max(256)
+      .regex(/^[a-zA-Z0-9_.-]+$/),
   }),
   z.object({ kind: z.literal("focus"), windowId: z.number().int().positive() }),
 ]);
@@ -108,6 +113,21 @@ export interface Observation {
 }
 
 const leaseId = z.string().min(1);
+export const Cursor = z.object({
+  target: Target.optional(),
+  x: z.number().finite().min(0).max(1),
+  y: z.number().finite().min(0).max(1),
+});
+export interface Participant {
+  id: string;
+  subject: string;
+  name: string;
+  role: "human" | "agent";
+  color: string;
+  cursor: z.infer<typeof Cursor> | null;
+  expiresAt: number;
+}
+const participantId = z.string().uuid();
 const recordingId = z.object({ id: z.string().uuid() });
 /** Tool metadata and runtime argument validation share these definitions. */
 export const methodArguments = {
@@ -116,10 +136,22 @@ export const methodArguments = {
   windows: z.object({}),
   state: z.object({}),
   observe: z.object({ target: Target.default({ kind: "display" }) }),
+  "presence.join": z.object({
+    name: z.string().trim().min(1).max(64).optional(),
+    role: z.enum(["human", "agent"]).default("human"),
+  }),
+  "presence.update": z.object({
+    participantId,
+    cursor: Cursor.nullable().optional(),
+  }),
+  "presence.leave": z.object({ participantId }),
+  "presence.list": z.object({}),
   acquire: z.object({
+    participantId: participantId.optional(),
     ttlMs: z.number().int().min(1000).max(60000).default(30000),
   }),
   takeover: z.object({
+    participantId: participantId.optional(),
     ttlMs: z.number().int().min(1000).max(60000).default(30000),
   }),
   renew: z.object({ leaseId }),

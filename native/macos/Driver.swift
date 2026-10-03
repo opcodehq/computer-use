@@ -22,6 +22,8 @@ struct SavedElement {
     var visualCapturedAt: Date?
     var lastCaptureImage: CGImage?
     var virtualCursor: CGPoint?
+    var desktopHeldModifiers: CGEventFlags = []
+    let desktopKeyCodes: [String: CGKeyCode] = ["a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,"1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"9":25,"7":26,"8":28,"0":29,"o":31,"u":32,"i":34,"p":35,"l":37,"j":38,"k":40,"n":45,"m":46,"Enter":36,"Tab":48,"Space":49,"Backspace":51,"Escape":53,"Meta":55,"Shift":56,"Alt":58,"Control":59,"Home":115,"PageUp":116,"Delete":117,"End":119,"PageDown":121,"ArrowLeft":123,"ArrowRight":124,"ArrowDown":125,"ArrowUp":126,"F1":122,"F2":120,"F3":99,"F4":118,"F5":96,"F6":97,"F7":98,"F8":100,"F9":101,"F10":109,"F11":103,"F12":111]
     let foregroundAllowed = ProcessInfo.processInfo.environment["JEV_INTERACTION_MODE"] == "foreground"
     var activatedRenderers = Set<String>()
     var observationErrors = 0
@@ -592,8 +594,229 @@ struct SavedElement {
         return found.values.sorted { $0.name < $1.name }
     }
 
+    // Remote desktop operations stay in this permission-owning helper. The broker
+    // serializes physical input; participant cursors are overlays, not HID devices.
+    func desktopWindows() throws -> [[String: Any]] {
+        guard CGPreflightScreenCaptureAccess() else { throw DriverFailure(code: "permission_denied", message: "Grant Screen Recording to Opcode.") }
+        let entries = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        return entries.compactMap { item in
+            guard let id = item[kCGWindowNumber as String] as? Int,
+                  let pid = item[kCGWindowOwnerPID as String] as? Int, pid > 0,
+                  let bounds = item[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds), rect.width > 0, rect.height > 0,
+                  (item[kCGWindowLayer as String] as? Int) == 0 else { return nil }
+            let frame = rect.integral
+            return ["id": id, "pid": pid, "title": item[kCGWindowName as String] as? String ?? "",
+                    "x": Double(frame.minX), "y": Double(frame.minY), "width": Int(frame.width), "height": Int(frame.height)]
+        }
+    }
+
+    func desktopGeometry(_ request: [String: Any]) throws -> [String: Any] {
+        guard let target = request["target"] as? [String: Any], let kind = target["kind"] as? String else {
+            throw DriverFailure(code: "InvalidRequest", message: "Desktop target required.")
+        }
+        if kind == "display" {
+            let id = CGMainDisplayID(), frame = CGDisplayBounds(id).integral
+            return ["id": Int(id), "x": Double(frame.minX), "y": Double(frame.minY), "width": Int(frame.width), "height": Int(frame.height)]
+        }
+        guard kind == "window", let id = target["id"] as? Int,
+              let window = try desktopWindows().first(where: { $0["id"] as? Int == id }) else {
+            throw DriverFailure(code: "stale_observation", message: "Window is no longer visible.")
+        }
+        return window
+    }
+
+    func desktopState() -> [String: Any] {
+        let cursor = CGEvent(source: nil)?.location ?? .zero
+        var focus = 0
+        if let app = NSWorkspace.shared.frontmostApplication {
+            let ax = AXUIElementCreateApplication(app.processIdentifier)
+            if let raw = value(ax, "AXFocusedWindow"), CFGetTypeID(raw) == AXUIElementGetTypeID() {
+                focus = Int(backgroundInput.windowID(raw as! AXUIElement) ?? 0)
+            }
+        }
+        return ["focus": focus, "x": cursor.x, "y": cursor.y]
+    }
+
+    func desktopCapture(_ request: [String: Any]) async throws -> [String: Any] {
+        guard CGPreflightScreenCaptureAccess() else { throw DriverFailure(code: "permission_denied", message: "Grant Screen Recording to Opcode.") }
+        guard #available(macOS 14.0, *) else { throw DriverFailure(code: "unsupported", message: "Remote desktop requires macOS 14 or later.") }
+        let geometry = try desktopGeometry(request)
+        let width = geometry["width"] as! Int, height = geometry["height"] as! Int
+        guard width > 0, height > 0, width <= 8192, height <= 8192 else {
+            throw DriverFailure(code: "unsupported", message: "Desktop dimensions exceed the capture limit.")
+        }
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let filter: SCContentFilter
+        if (request["target"] as? [String: Any])?["kind"] as? String == "window" {
+            guard let window = content.windows.first(where: { Int($0.windowID) == geometry["id"] as? Int }) else {
+                throw DriverFailure(code: "stale_observation", message: "Window disappeared before capture.")
+            }
+            filter = SCContentFilter(desktopIndependentWindow: window)
+        } else {
+            guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
+                throw DriverFailure(code: "display_unavailable", message: "Primary display is unavailable.")
+            }
+            filter = SCContentFilter(display: display, excludingWindows: [])
+        }
+        let config = SCStreamConfiguration()
+        config.width = width; config.height = height; config.showsCursor = false
+        config.ignoreShadowsSingleWindow = true; config.ignoreGlobalClipSingleWindow = true
+        let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        guard NSDictionary(dictionary: geometry).isEqual(to: try desktopGeometry(request)),
+              let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]), png.count <= 12_000_000 else {
+            throw DriverFailure(code: "stale_observation", message: "Display changed during capture or image exceeds limit.")
+        }
+        var sample = [UInt8](repeating: 0, count: 64 * 48 * 4)
+        let sampled = sample.withUnsafeMutableBytes { bytes -> Bool in
+            guard let context = CGContext(data: bytes.baseAddress, width: 64, height: 48, bitsPerComponent: 8, bytesPerRow: 64 * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: 64, height: 48)); return true
+        }
+        guard sampled else { throw DriverFailure(code: "CaptureFailed", message: "Could not sample desktop frame.") }
+        return ["geometry": geometry, "base64": png.base64EncodedString(), "sample": Data(sample).base64EncodedString()]
+    }
+
+    func desktopInput(_ request: [String: Any]) throws -> [String: Any] {
+        try requireAX()
+        guard request["foregroundApproved"] as? Bool == true,
+              let action = request["action"] as? [String: Any], let kind = action["kind"] as? String else {
+            throw DriverFailure(code: "permission_denied", message: "Desktop input requires explicit foreground approval.")
+        }
+        let releasing = kind == "keyUp" || kind == "buttonUp"
+        let geometry = try desktopGeometry(request)
+        if !releasing {
+            guard let expected = request["expectedGeometry"] as? [String: Any], NSDictionary(dictionary: expected).isEqual(to: geometry) else {
+                throw DriverFailure(code: "stale_observation", message: "Desktop geometry changed before input.")
+            }
+            if (request["target"] as? [String: Any])?["kind"] as? String == "window", kind != "focus" {
+                guard desktopState()["focus"] as? Int == geometry["id"] as? Int else {
+                    throw DriverFailure(code: "stale_observation", message: "Focus the target window and observe again before physical input.")
+                }
+            }
+            if let app = NSWorkspace.shared.frontmostApplication {
+                let ax = AXUIElementCreateApplication(app.processIdentifier)
+                if let raw = value(ax, "AXFocusedUIElement"), CFGetTypeID(raw) == AXUIElementGetTypeID() {
+                    let field = raw as! AXUIElement
+                    guard string(field, "AXRole") != "AXSecureTextField", string(field, "AXSubrole") != "AXSecureTextField" else {
+                        throw DriverFailure(code: "permission_denied", message: "Remote input is disabled in protected fields.")
+                    }
+                }
+            }
+        }
+        guard let originX = geometry["x"] as? Double, let originY = geometry["y"] as? Double else {
+            throw DriverFailure(code: "stale_observation", message: "Desktop coordinate origin is unavailable.")
+        }
+        let origin = CGPoint(x: originX, y: originY)
+        let width = geometry["width"] as! Int, height = geometry["height"] as! Int
+        if (request["target"] as? [String: Any])?["kind"] as? String == "window", ["scroll", "buttonDown"].contains(kind) {
+            let bounds = CGRect(x: origin.x, y: origin.y, width: Double(width), height: Double(height))
+            guard let cursor = CGEvent(source: nil)?.location, bounds.contains(cursor) else {
+                throw DriverFailure(code: "stale_observation", message: "Hover inside the target window and observe again before scrolling or holding a button.")
+            }
+        }
+        func point(_ x: String, _ y: String) throws -> CGPoint {
+            guard let px = action[x] as? Double, let py = action[y] as? Double,
+                  px.isFinite, py.isFinite, px >= 0, py >= 0, px < Double(width), py < Double(height) else {
+                throw DriverFailure(code: "invalid_coordinates", message: "Input must be inside the observed image.")
+            }
+            return CGPoint(x: origin.x + px, y: origin.y + py)
+        }
+        func mouse(_ type: CGEventType, _ p: CGPoint, _ button: CGMouseButton = .left, count: Int64 = 1) throws {
+            guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: button) else {
+                throw DriverFailure(code: "unsupported", message: "Could not allocate mouse event.", delivery: "unknown")
+            }
+            event.flags = desktopHeldModifiers
+            event.setIntegerValueField(.mouseEventClickState, value: count); event.post(tap: .cghidEventTap)
+        }
+        func code(_ key: String) -> CGKeyCode? { desktopKeyCodes[key] ?? (key.count == 1 ? desktopKeyCodes[key.lowercased()] : nil) }
+        func keyboard(_ key: String, _ down: Bool, _ flags: CGEventFlags = []) throws {
+            guard let c = code(key), let event = CGEvent(keyboardEventSource: nil, virtualKey: c, keyDown: down) else {
+                throw DriverFailure(code: "unsupported", message: "Unsupported named key.")
+            }
+            event.flags = flags.union(desktopHeldModifiers); event.post(tap: .cghidEventTap)
+        }
+        switch kind {
+        case "click", "doubleClick", "rightClick", "hover", "drag":
+            let start = try point("x", "y")
+            let end = kind == "drag" ? try point("toX", "toY") : start
+            if kind == "hover" { try mouse(.mouseMoved, start) }
+            else if kind == "rightClick" { try mouse(.rightMouseDown, start, .right); try mouse(.rightMouseUp, start, .right) }
+            else {
+                let count = kind == "doubleClick" ? 2 : 1
+                for index in 1...count {
+                    try mouse(.leftMouseDown, start, count: Int64(index))
+                    if kind == "drag" {
+                        for step in 1...12 {
+                            let f = Double(step) / 12
+                            try mouse(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * f, y: start.y + (end.y - start.y) * f))
+                            Thread.sleep(forTimeInterval: 0.01)
+                        }
+                    }
+                    try mouse(.leftMouseUp, end, count: Int64(index))
+                }
+            }
+        case "buttonDown", "buttonUp":
+            guard let button = action["button"] as? Int, (1...3).contains(button) else { throw DriverFailure(code: "InvalidRequest", message: "Invalid button.") }
+            let p = CGEvent(source: nil)?.location ?? .zero
+            let down = kind == "buttonDown"
+            try mouse(button == 1 ? (down ? .leftMouseDown : .leftMouseUp) : button == 3 ? (down ? .rightMouseDown : .rightMouseUp) : (down ? .otherMouseDown : .otherMouseUp), p, button == 1 ? .left : button == 3 ? .right : .center)
+        case "key", "keyDown", "keyUp":
+            guard let key = action["key"] as? String else { throw DriverFailure(code: "InvalidRequest", message: "Missing key.") }
+            let parts = key.components(separatedBy: "+")
+            guard !parts.isEmpty, parts.allSatisfy({ code($0) != nil }), kind == "key" || parts.count == 1 else {
+                throw DriverFailure(code: "unsupported", message: "Unsupported key combination.")
+            }
+            let modifiers: [String: CGEventFlags] = ["Meta": .maskCommand, "Control": .maskControl, "Alt": .maskAlternate, "Shift": .maskShift]
+            if kind == "key" {
+                guard parts.dropLast().allSatisfy({ modifiers[$0] != nil }) else { throw DriverFailure(code: "unsupported", message: "Only modifiers may precede a key.") }
+                let flags = parts.dropLast().reduce(CGEventFlags()) { $0.union(modifiers[$1] ?? []) }
+                try keyboard(parts.last!, true, flags); try keyboard(parts.last!, false, flags)
+            } else {
+                if let modifier = modifiers[key] {
+                    if kind == "keyDown" { desktopHeldModifiers.insert(modifier) } else { desktopHeldModifiers.remove(modifier) }
+                }
+                try keyboard(key, kind == "keyDown")
+            }
+        case "text":
+            guard let text = action["text"] as? String, !text.isEmpty, text.utf16.count <= 16000, !text.contains("\0") else { throw DriverFailure(code: "InvalidRequest", message: "Invalid text.") }
+            // Quartz limits Unicode payloads; chunk on Unicode scalar boundaries.
+            var chunks: [[UInt16]] = [[]]
+            for scalar in text.unicodeScalars {
+                let units = Array(String(scalar).utf16)
+                if chunks[chunks.count - 1].count + units.count > 20 { chunks.append([]) }
+                chunks[chunks.count - 1].append(contentsOf: units)
+            }
+            for units in chunks {
+                guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true), let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else { throw DriverFailure(code: "unsupported", message: "Could not allocate text event.", delivery: "unknown") }
+                units.withUnsafeBufferPointer { buffer in
+                    down.keyboardSetUnicodeString(stringLength: units.count, unicodeString: buffer.baseAddress!); up.keyboardSetUnicodeString(stringLength: units.count, unicodeString: buffer.baseAddress!)
+                }
+                down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
+            }
+        case "scroll":
+            guard let amount = action["amount"] as? Int, (-30...30).contains(amount), let axis = action["axis"] as? String, ["x", "y"].contains(axis),
+                  let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: axis == "y" ? Int32(-amount) : 0, wheel2: axis == "x" ? Int32(-amount) : 0, wheel3: 0) else { throw DriverFailure(code: "InvalidRequest", message: "Invalid scroll.") }
+            event.post(tap: .cghidEventTap)
+        case "focus":
+            guard let id = action["windowId"] as? Int, let item = try desktopWindows().first(where: { $0["id"] as? Int == id }), let pid = item["pid"] as? Int else { throw DriverFailure(code: "stale_observation", message: "Window disappeared.") }
+            let ax = AXUIElementCreateApplication(pid_t(pid))
+            guard let windows = value(ax, "AXWindows") as? [AXUIElement], let window = windows.first(where: { backgroundInput.windowID($0) == CGWindowID(id) }) else { throw DriverFailure(code: "unsupported", message: "Window is not accessible.") }
+            NSRunningApplication(processIdentifier: pid_t(pid))?.activate(options: [])
+            guard AXUIElementPerformAction(window, "AXRaise" as CFString) == .success else { throw DriverFailure(code: "ActionOutcomeUnknown", message: "Window focus unconfirmed.", delivery: "unknown") }
+        default: throw DriverFailure(code: "unsupported", message: "Unsupported desktop action.")
+        }
+        return ["delivery": "dispatchedUnverified"]
+    }
+
     func handle(_ request: [String: Any]) async throws -> Any {
         switch request["method"] as? String {
+        case "desktopKeys": return desktopKeyCodes.keys.sorted()
+        case "desktopGeometry": return try desktopGeometry(request)
+        case "desktopWindows": return try desktopWindows()
+        case "desktopState": return desktopState()
+        case "desktopCapture": return try await desktopCapture(request)
+        case "desktopInput": return try desktopInput(request)
         case "installedApps": return installedApps().map { ["id": $0.id, "name": $0.name] }
         case "launchApp":
             guard let id = request["appId"] as? String, let target = installedApps().first(where: { $0.id == id }) else {

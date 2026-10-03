@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Add a macOS backend for the shared desktop broker through the permission-owning Opcode helper.
+- Add scoped multiplayer presence, named cursor overlays, participant lists, and explicit input handoff for people and agents.
+- Add private sharing credentials, HTTPS clients, and OpenSSH tunnels with verified forwarding readiness.
+- Publish agent presence automatically through MCP; preserve uncertain input outcomes and held-input recovery across failures.
+- Add remote-access, multiplayer HTTP/browser, and Mac transport tests, plus cross-platform verification CI.
+
+
 ## 0.3.0 — 2026-10-03
 
 - Add a shared Linux X11 desktop service with full-display and window capture, input, and attachment to existing displays.
