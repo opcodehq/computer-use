@@ -28,9 +28,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run check
       - run: bun run build
-      - run: bun test
       - name: Compile permission-owning Mac helper
         if: runner.os == 'macOS'
         env:
           CU_NATIVE_DIR: ${{ runner.temp }}/opcode-native
         run: bash scripts/build-native.sh
+      - run: bun test
