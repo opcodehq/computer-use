@@ -35,4 +35,5 @@ jobs:
         run: |
           bash scripts/build-native.sh
           node scripts/test-macos-desktop.mjs
+          bun scripts/test-macos-desktop-live.ts
       - run: bun test

@@ -706,6 +706,12 @@ struct SavedElement {
         }
         let origin = CGPoint(x: geometry["x"] as? Double ?? 0, y: geometry["y"] as? Double ?? 0)
         let width = geometry["width"] as! Int, height = geometry["height"] as! Int
+        if (request["target"] as? [String: Any])?["kind"] as? String == "window", ["scroll", "buttonDown"].contains(kind) {
+            let bounds = CGRect(x: origin.x, y: origin.y, width: Double(width), height: Double(height))
+            guard let cursor = CGEvent(source: nil)?.location, bounds.contains(cursor) else {
+                throw DriverFailure(code: "stale_observation", message: "Hover inside the target window and observe again before scrolling or holding a button.")
+            }
+        }
         func point(_ x: String, _ y: String) throws -> CGPoint {
             guard let px = action[x] as? Double, let py = action[y] as? Double,
                   px.isFinite, py.isFinite, px >= 0, py >= 0, px < Double(width), py < Double(height) else {

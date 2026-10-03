@@ -112,7 +112,9 @@ observation includes the target's desktop origin, which can be negative for a
 window on another display. Full-display capture selects the primary display.
 Use the window list and its IDs to select an exact window. Before physical input
 to a window target, focus that window and obtain a fresh observation; otherwise
-input is rejected. Window capture does not provide an isolated input session.
+input is rejected. Before scrolling or pressing a held mouse button on a window,
+hover inside that window and observe again; a pointer outside the target is rejected.
+Window capture does not provide an isolated input session.
 
 Supported input includes clicks, double/right clicks, hover, drag, vertical and
 horizontal scroll, text, named keys and modifier combinations, held keys/buttons,
