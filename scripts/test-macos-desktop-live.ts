@@ -59,6 +59,7 @@ const pending = new Map<
     resolve(value: unknown): void;
     reject(error: Error): void;
     timer: ReturnType<typeof setTimeout>;
+    method: string;
   }
 >();
 function disconnected() {
@@ -79,7 +80,13 @@ lines.on("line", (line) => {
     pending.delete(reply.id);
     clearTimeout(task.timer);
     if (reply.ok) task.resolve(reply.data);
-    else task.reject(Object.assign(Error(reply.error.message), reply.error));
+    else {
+      console.error(
+        "NATIVE FAILURE",
+        JSON.stringify({ method: task.method, ...reply.error }),
+      );
+      task.reject(Object.assign(Error(reply.error.message), reply.error));
+    }
   } catch (error) {
     disconnected();
     driverProcess.kill();
@@ -95,7 +102,7 @@ const driver: MacDriver = {
         reject(Error(`Native ${method} timed out.`));
         driverProcess.kill();
       }, 15_000);
-      pending.set(id, { resolve, reject, timer });
+      pending.set(id, { resolve, reject, timer, method });
       driverProcess.stdin.write(JSON.stringify({ ...args, id, method }) + "\n");
     });
     signal?.throwIfAborted();
@@ -260,6 +267,9 @@ try {
     }),
     /lease|control/i,
   );
+  console.log(
+    "PASS capture, overlay cursors, and lease takeover; next: native fixture focus.",
+  );
   // Focus only our exact disposable window before delivering physical input.
   const observed = await c.observe(human, { kind: "display" });
   await call(human, "input", {
@@ -294,9 +304,12 @@ try {
       x: point.x - observation.desktopBounds.x,
       y: point.y - observation.desktopBounds.y,
     });
+  console.log("PASS fixture focus; next: native field click.");
   await act(click(manifest.field));
   const text = "Opcode shared desktop CI Unicode α🙂 and chunked text verified";
+  console.log("PASS field click; next: native Unicode text.");
   await act({ kind: "text", text });
+  console.log("PASS text dispatch; next: native save click.");
   await act(click(manifest.save));
   const result = await poll(async () => {
     try {
