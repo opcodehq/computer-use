@@ -6,7 +6,7 @@ import { createInterface } from "node:readline";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
-import { LinuxVision } from "./vision.js";
+import type { LinuxVision } from "./vision.js";
 import type { Snapshot } from "../shared/contracts.js";
 const exec = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -14,7 +14,14 @@ const helper =
   process.env.CU_X11_HELPER ?? resolve(root, "native/linux/build/cu-x11");
 const model =
   process.env.CU_YOLO_MODEL_PATH ?? resolve(root, ".models/ui-detector.onnx");
-const vision = new LinuxVision();
+let vision: LinuxVision | undefined;
+async function detect(png:Buffer,id:string){vision ??= new (await import("./vision.js")).LinuxVision();return vision.analyze(png,id,model);}
+async function regionsFor(png:Buffer,id:string,width:number,height:number){
+ const raw={regions:[],width,height,model:'raw'};
+ if(process.env.CU_PERCEPTION==='raw')return raw;
+ try{await access(model);return {...await detect(png,id),model:'yolo-onnx+ocr'};}
+ catch(e){if(process.env.CU_PERCEPTION==='detector')throw error('Optional detector is unavailable. Install perception dependencies and weights, or select raw mode.','ModelUnavailable');return raw;}
+}
 type WindowInfo = {
   id: number;
   pid: number;
@@ -121,7 +128,7 @@ async function dispatch(r: Record<string, any>) {
       screenRecording: available,
       isolated: process.env.CU_LINUX_DESKTOP === "1",
       displayReady: available,
-      visual: { ocr: true, modelInstalled: installed, modelPath: model },
+      visual: { ocr: process.env.CU_PERCEPTION === "detector", modelInstalled: installed, modelPath: model },
     };
   }
   if (
@@ -159,7 +166,7 @@ async function dispatch(r: Record<string, any>) {
     const window = list[0]!,
       png = await capture(window),
       id = randomUUID(),
-      regions = await vision.analyze(png, id, model);
+      regions = await regionsFor(png,id,window.width,window.height);
     const snapshot: Snapshot = {
       id,
       source: "visual",
@@ -170,7 +177,7 @@ async function dispatch(r: Record<string, any>) {
       capturedAt: new Date().toISOString(),
       truncated: false,
       visual: {
-        model: "yolo-onnx+ocr",
+        model: regions.model,
         durationMs: Math.round(performance.now() - started),
         regionCount: regions.regions.length,
       },
@@ -230,7 +237,7 @@ async function dispatch(r: Record<string, any>) {
       pointSize: { width: c.window.width, height: c.window.height },
       origin: { x: c.window.x, y: c.window.y },
       actionable: true,
-      model: "yolo-onnx+ocr",
+      model: c.snapshot.visual?.model ?? "raw",
       durationMs: c.snapshot.visual?.durationMs ?? 0,
       image: c.png.toString("base64"),
     };
@@ -245,6 +252,18 @@ async function dispatch(r: Record<string, any>) {
     };
   }
   if (r.method === "execute" || r.method === "linuxInput") {
+    if (process.env.DISPLAY) {
+      const { registryPath } = await import('./display-registry.js');
+      try { await access(registryPath(process.env.DISPLAY)); }
+      catch { return executeLegacy(r); }
+      throw error('A shared display broker is registered. Use cu desktop-api / its MCP tools so all input shares one controller.', 'LeaseConflict');
+    }
+    return executeLegacy(r);
+  }
+  if (r.method === "installedApps") return [];
+  throw error("Unsupported Linux driver method: " + r.method, "Unsupported");
+}
+async function executeLegacy(r: Record<string, any>) {
     const c = await fresh(r.snapshotId);
     const a = r.action;
     if (!a || typeof a !== "object") throw error("Supply an action.");
@@ -348,9 +367,6 @@ async function dispatch(r: Record<string, any>) {
     }
     await new Promise((resolve) => setTimeout(resolve, 180));
     return { delivery: "dispatchedUnverified", inputRoute: delivery === "background" ? "x11-send-event" : "isolated-xtest", acceptedByApp: "unverified" };
-  }
-  if (r.method === "installedApps") return [];
-  throw error("Unsupported Linux driver method: " + r.method, "Unsupported");
 }
 const input = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of input) {
@@ -376,4 +392,4 @@ for await (const line of input) {
     );
   }
 }
-await vision.close();
+await vision?.close();

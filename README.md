@@ -47,9 +47,9 @@ cu doctor
 
 The npm package requires Node.js 20+ and Bun 1.3.10+. `cu install` builds the
 native runtime in your user cache: macOS requires Xcode Command Line Tools;
-Linux requires a C compiler, X11/XTest development headers, and Xvfb. On Mac, setup installs the Opcode helper app as the permission owner. It does
-not run sudo or modify system packages. On both platforms it downloads a
-checksum-verified UI detection model; see [Linux setup](docs/LINUX_CLOUD.md)
+Linux requires a C compiler and X11/XTest development headers; creating a new desktop also requires Xvfb. On Mac, setup installs the Opcode helper app as the permission owner. It does
+not run sudo or modify system packages. Linux detection models are optional (`cu install --with-model`); Mac setup downloads a
+checksum-verified UI detection model. See [Linux setup](docs/LINUX_CLOUD.md)
 for system packages and model terms. Chrome/Chromium is required for browser tools.
 
 For an isolated Linux desktop, start your agent with `cu desktop -- YOUR_AGENT`.
@@ -157,7 +157,7 @@ This is a Mac beta, not an isolated second desktop. Off-screen windows, secure
 fields, unsupported controls, and unresolved uncertainty can stop a task.
 Cross-app planning, generated text, and missing account information belong to the
 host coding agent. The documented fixture tests do not guarantee arbitrary
-website signup or account setup. Linux native control is not implemented.
+website signup or account setup. Linux X11 control is available through the native driver and shared desktop service.
 
 ## Guides
 
@@ -188,7 +188,7 @@ secrets, and `.context/` artifacts are also ignored.
 
 ## Linux cloud desktops
 
-Run a separate Xvfb desktop with local YOLO/OCR and model-free CLI/MCP input.
+Attach to an existing provider X11 desktop with raw screenshots, shared control ownership, authenticated viewing and headless recording. No detector or model API key is required. Start with the [Zuse integration guide](docs/ZUSE_INTEGRATION.md), then the [shared desktop service contract](docs/DESKTOP_SERVICE.md). Creating a separate Xvfb desktop remains available for local isolation.
 See [Linux cloud setup and the real desktop smoke test](docs/LINUX_CLOUD.md).
 
 ## Pointer, browser and viewer tools

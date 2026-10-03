@@ -277,6 +277,7 @@ export class BrowserTools {
     input: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<unknown> {
+    if (!browserReads.has(String(input.operation))) await this.checkDisplayOwner();
     if (this.busy) throw new Error("Browser is busy.");
     this.busy = true;
     try {
@@ -625,7 +626,17 @@ export class BrowserTools {
       pageId: this.active ? this.pageId(this.active) : undefined,
     };
   }
+  private async checkDisplayOwner() {
+    if (process.platform === 'linux' && process.env.DISPLAY) {
+      const { registryPath } = await import('../linux/display-registry.js');
+      const { access } = await import('node:fs/promises');
+      let broker = false;
+      try { await access(registryPath(process.env.DISPLAY)); broker = true; } catch {}
+      if (broker) throw Object.assign(new Error('This display has a shared controller. Use desktop-api input so browser and native actions share its lease.'), { code: 'LeaseConflict', delivery: 'notDispatched' });
+    }
+  }
   async humanInput(action: Record<string, unknown>) {
+    await this.checkDisplayOwner();
     if (action.kind === "dialog") {
       const entry = this.dialogs.get(String(action.dialogId));
       if (!entry) throw new Error("Unknown dialog.");

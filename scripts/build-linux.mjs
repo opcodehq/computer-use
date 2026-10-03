@@ -19,6 +19,6 @@ execFileSync(
 const quote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
 await writeFile(
   resolve(output,"desktop-driver"),
-  `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(resolve("src/linux/driver.ts"))}\n`,
+  `#!/bin/sh\nexec ${quote(process.versions.bun ? process.execPath : process.env.CU_BUN_PATH ?? 'bun')} ${quote(resolve("src/linux/driver.ts"))}\n`,
   { mode: 0o755 },
 );

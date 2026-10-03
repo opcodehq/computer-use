@@ -15,7 +15,7 @@ export function readiness(input: ReadinessInput) {
     const checks: Check[] = [
       { name: 'Native driver', state: input.executable ? 'ok' : 'required', detail: 'Build with bun run setup:linux.' },
       { name: 'Isolated desktop', state: status?.permissions?.displayReady && status.permissions.isolated ? 'ok' : 'required', detail: 'Start the agent inside bun run desktop:linux -- <agent command>.' },
-      { name: 'YOLO model', state: status?.permissions?.visual?.modelInstalled ? 'ok' : 'required', detail: 'Install the pinned model with bun run setup:linux.' },
+      { name: 'YOLO model', state: status?.permissions?.visual?.modelInstalled ? 'ok' : 'optional', detail: 'Raw capture needs no detector. Optional: cu install --with-model and CU_PERCEPTION=detector.' },
     ];
     const ready = checks.every(check => check.state !== 'required');
     return { ready, jevReady: ready && input.credential.source !== 'missing', checks };

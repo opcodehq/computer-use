@@ -1,5 +1,10 @@
 # Linux cloud desktops
 
+For provider integration, whole-display capture, shared control, scoped grants and
+recording, use the [desktop service](DESKTOP_SERVICE.md). The window-oriented
+commands below remain available when no shared broker owns the display.
+
+
 Run one isolated graphical display per cloud agent. The host coding agent owns the
 goal, reasoning and tool loop; cu supplies screenshots, detected controls, mouse
 input, typing and keys. Jev and a separate model API key are not required.
@@ -54,8 +59,7 @@ You can pass your agent executable directly to desktop:linux instead of bash.
 The agent can launch graphical applications using its existing shell tool.
 The display is destroyed when the child command exits. No X11 TCP port is opened.
 
-The Linux distribution is currently a **source checkout** with local native
-dependencies. The standalone macOS installer does not install this Linux runtime.
+The npm distribution and source checkout use local native dependencies. The standalone macOS installer does not install this Linux runtime.
 No Python runtime is used by this path.
 
 ## Give any coding agent the tools
@@ -110,7 +114,7 @@ Do not pipe large base64 captures through a command bridge with a small output c
 
 ## Local vision and optional autonomous model loop
 
-The runtime combines a pinned YOLO ONNX UI detector and local English OCR.
+Raw observation needs no detector. Optional enrichment combines a pinned YOLO ONNX UI detector and local English OCR; install it explicitly with `cu install --with-model`.
 Setup downloads approximately 12 MB of weights and verifies SHA-256 before use.
 Inference runs on CPU; screenshots are not sent to Jev. Vision-capable AI SDK
 task models receive screenshot images along with candidate controls. A host

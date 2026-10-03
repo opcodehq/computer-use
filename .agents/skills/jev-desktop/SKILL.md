@@ -87,6 +87,17 @@ part of the default subscription-backed host-agent workflow. Their credentials
 and billing differ from the host's existing login. See
 [agents.md](references/agents.md) for that opt-in path and generic MCP configuration.
 
+## Shared Linux cloud desktops
+
+For existing provider displays, full-screen capture, concurrent agents, scoped
+viewers or recordings, read [desktop service](references/desktop-service.md).
+Use `cu desktop-api` and its `computer_*` MCP tools. Attach to the host-selected
+X display with its lifecycle generation; do not create another Xvfb. Acquire one
+display lease, observe, and bind each input to that observation and lease. On
+revocation/unknown delivery, observe and recover; never replay input blindly.
+Minimal installs omit perception/AI dependencies and use `cu install --minimal`.
+Live provider compatibility must be verified; installation alone does not prove it.
+
 ## Browser workflows and Linux
 
 For website tasks, read [workspace.md](references/workspace.md) for session-owned

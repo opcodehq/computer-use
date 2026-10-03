@@ -12,3 +12,8 @@ for (const name of ['BarlowCondensed-Medium.ttf', 'OFL.txt']) await copyFile(`sr
 await build({ entryPoints: ['src/tool/cli.ts'], outfile: 'dist/cli.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external', banner: { js: '#!/usr/bin/env bun' } });
 await chmod('dist/cli.mjs', 0o755);
 for (const name of ['helper-proxy', 'vision-worker']) await build({ entryPoints: [`src/macos/${name}.ts`], outfile: `dist/${name}.mjs`, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+
+await build({ entryPoints: ['src/desktop/cli.ts'], outfile: 'dist/desktop-api.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+for (const [source,name] of [['index','service'],['protocol','protocol']]) await build({ entryPoints: [`src/desktop/${source}.ts`], outfile: `dist/desktop-${name}.mjs`, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+const {execFileSync}=await import('node:child_process');
+execFileSync('node',['node_modules/typescript/bin/tsc','--declaration','--emitDeclarationOnly','--skipLibCheck','--module','NodeNext','--target','ES2022','--outDir','dist/types','--rootDir','src','src/desktop/index.ts'],{stdio:'inherit'});
