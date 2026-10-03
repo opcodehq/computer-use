@@ -120,7 +120,7 @@ from local blockers while retaining ownership of the full workflow. You should n
 
 **A cloud coding workspace needs a Mac command bridge supplied by its host.**
 Install and execute Jev on the Mac through that bridge. A Linux shell or cloud MCP
-process alone cannot operate your Mac. Jev does not provide a remote bridge.
+process alone cannot operate your Mac. For shared remote desktops, use the scoped `cu desktop-api` SSH/HTTPS bridge described below.
 
 ## Optional delegated workflows
 
@@ -185,6 +185,23 @@ bun run desktop
 Bun manages packages and runs the CLI. Effect manages native driver requests.
 Reference repositories live in ignored `.repos/`; dependencies, build output,
 secrets, and `.context/` artifacts are also ignored.
+
+## Remote desktops and multiplayer
+
+Share an existing Mac or Linux X11 desktop with people and agents. Each
+participant has a named visual cursor; a scoped input lease controls who can
+click or type. Takeover fences previous input, and expired or revoked access
+removes that participant. Existing signed-in apps stay on the target computer.
+
+Use `cu desktop-api attach`, `share`, `tunnel`, `viewer`, and `mcp` from the npm
+CLI. Remote access uses HTTPS or OpenSSH, including your existing Tailnet SSH
+aliases. See [Mac setup and limits](docs/MAC_DESKTOP.md) and the
+[shared desktop contract](docs/DESKTOP_SERVICE.md). The standalone legacy Mac
+bundle does not include these `desktop-api` commands; use the npm distribution.
+
+Cursors are multiplayer overlays. OS input has one owner at a time; independent
+simultaneous physical cursors and VM management are not implemented. The viewer
+uses bounded PNG polling rather than video streaming.
 
 ## Linux cloud desktops
 
