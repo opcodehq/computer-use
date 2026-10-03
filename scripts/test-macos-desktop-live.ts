@@ -282,6 +282,11 @@ try {
       (await backend.state()).focus === window.id ? true : undefined,
     "Fixture window did not become focused.",
   );
+  assert.notEqual(
+    window.x,
+    0,
+    "Fixture must exercise a nonzero horizontal window origin.",
+  );
   const target = { kind: "window" as const, id: window.id };
   async function act(action: Action | ((observation: Observation) => Action)) {
     await delay(200);
@@ -307,7 +312,14 @@ try {
   console.log("PASS fixture focus; next: native field click.");
   await act(click(manifest.field));
   const text = "Opcode shared desktop CI Unicode α🙂 and chunked text verified";
-  console.log("PASS field click; next: native Unicode text.");
+  await poll(
+    async () =>
+      (await backend.state()).focus === window.id ? true : undefined,
+    "Native field click moved focus away from the fixture; check nonzero window-origin coordinate mapping.",
+  );
+  console.log(
+    "PASS field click retained exact window focus; next: native Unicode text.",
+  );
   await act({ kind: "text", text });
   console.log("PASS text dispatch; next: native save click.");
   await act(click(manifest.save));

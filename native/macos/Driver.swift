@@ -607,7 +607,7 @@ struct SavedElement {
                   (item[kCGWindowLayer as String] as? Int) == 0 else { return nil }
             let frame = rect.integral
             return ["id": id, "pid": pid, "title": item[kCGWindowName as String] as? String ?? "",
-                    "x": frame.minX, "y": frame.minY, "width": Int(frame.width), "height": Int(frame.height)]
+                    "x": Double(frame.minX), "y": Double(frame.minY), "width": Int(frame.width), "height": Int(frame.height)]
         }
     }
 
@@ -617,7 +617,7 @@ struct SavedElement {
         }
         if kind == "display" {
             let id = CGMainDisplayID(), frame = CGDisplayBounds(id).integral
-            return ["id": Int(id), "x": frame.minX, "y": frame.minY, "width": Int(frame.width), "height": Int(frame.height)]
+            return ["id": Int(id), "x": Double(frame.minX), "y": Double(frame.minY), "width": Int(frame.width), "height": Int(frame.height)]
         }
         guard kind == "window", let id = target["id"] as? Int,
               let window = try desktopWindows().first(where: { $0["id"] as? Int == id }) else {
@@ -704,7 +704,10 @@ struct SavedElement {
                 }
             }
         }
-        let origin = CGPoint(x: geometry["x"] as? Double ?? 0, y: geometry["y"] as? Double ?? 0)
+        guard let originX = geometry["x"] as? Double, let originY = geometry["y"] as? Double else {
+            throw DriverFailure(code: "stale_observation", message: "Desktop coordinate origin is unavailable.")
+        }
+        let origin = CGPoint(x: originX, y: originY)
         let width = geometry["width"] as! Int, height = geometry["height"] as! Int
         if (request["target"] as? [String: Any])?["kind"] as? String == "window", ["scroll", "buttonDown"].contains(kind) {
             let bounds = CGRect(x: origin.x, y: origin.y, width: Double(width), height: Double(height))
