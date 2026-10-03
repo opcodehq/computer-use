@@ -1,24 +1,26 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
-import { DesktopController } from "../src/desktop/controller.js";
-import { X11Backend } from "../src/desktop/backend.js";
+import { test } from "node:test";
 import { Authority } from "../src/desktop/authority.js";
+import { X11Backend } from "../src/desktop/backend.js";
+import { DesktopController } from "../src/desktop/controller.js";
 import {
-  scopes,
-  type Request,
   type Action,
+  type Request,
+  scopes,
   type Target,
 } from "../src/desktop/protocol.js";
+
 class Fixture extends X11Backend {
   delivered: Action[] = [];
   block = false;
   color = 0;
   width = 640;
   releaseCount = 0;
+  failRelease = false;
   override async geometry() {
     return { id: 1, x: 0, y: 0, width: this.width, height: 480 };
   }
@@ -35,6 +37,7 @@ class Fixture extends X11Backend {
   }
   override async input(_t: Target, a: Action, s: AbortSignal) {
     if (a.kind === "keyUp") {
+      if (this.failRelease) throw Error("driver disconnected");
       this.releaseCount++;
       return;
     }
@@ -82,7 +85,11 @@ test("one controller, takeover cancels queued input and releases held keys; fres
       }),
       a,
     );
-    const failure = assert.rejects(action, /may have been delivered/);
+    const failure = assert.rejects(action, (error: unknown) => {
+      assert.equal((error as { delivery: string }).delivery, "unknown");
+      assert.equal((error as { code: string }).code, "outcome_unknown");
+      return true;
+    });
     await new Promise((r) => setTimeout(r, 10));
     const queued = c.call(
       request("input", {
@@ -149,6 +156,188 @@ test("duplicate mutations do not replay; changed pixels, geometry and generation
     );
   } finally {
     await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("multiplayer cursors require presence scope and do not grant OS input; participant leave fences held input", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opcode-multiplayer-"));
+  const backend = new Fixture("", {});
+  const c = new DesktopController(backend, "one", directory);
+  await c.init();
+  try {
+    const viewer = c.authority.issue("viewer", ["viewer-read"], 60000);
+    const participant = c.authority.issue(
+      "alice",
+      ["viewer-read", "presence"],
+      60000,
+    );
+    const controller = c.authority.issue("bob", [...scopes], 60000);
+    await assert.rejects(c.call(request("presence.join"), viewer), /scope/);
+    const alice = (await c.call(
+      request("presence.join", { name: "Alice", role: "human" }),
+      participant,
+    )) as { id: string };
+    await assert.rejects(
+      c.call(request("takeover", { participantId: alice.id }), participant),
+      /scope/,
+    );
+    await assert.rejects(
+      c.call(request("takeover", { participantId: alice.id }), controller),
+      /another credential/,
+    );
+    const bob = (await c.call(
+      request("presence.join", { name: "Bob" }),
+      controller,
+    )) as { id: string };
+    const lease = (await c.call(
+      request("takeover", { participantId: bob.id }),
+      controller,
+    )) as { id: string };
+    const observation = await c.observe(controller, { kind: "display" });
+    await c.call(
+      request("input", {
+        leaseId: lease.id,
+        observationId: observation.observationId,
+        action: { kind: "keyDown", key: "Shift" },
+      }),
+      controller,
+    );
+    await c.call(
+      request("presence.leave", { participantId: alice.id }),
+      participant,
+    );
+    assert.equal(c.multiplayerState().controller?.participantId, bob.id);
+    await c.call(
+      request("presence.leave", { participantId: bob.id }),
+      controller,
+    );
+    assert.equal(c.multiplayerState().controller, null);
+    assert.equal(backend.releaseCount, 1);
+    await assert.rejects(
+      c.call(request("renew", { leaseId: lease.id }), controller),
+      /Acquire/,
+    );
+    c.authority.revoke(controller.id);
+    await assert.rejects(
+      c.call(request("presence.join"), controller),
+      /revoked/,
+    );
+  } finally {
+    await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("revocation and rebind remove multiplayer identities and invalidate participant-bound leases", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opcode-multiplayer-"));
+  const c = new DesktopController(new Fixture("", {}), "one", directory);
+  await c.init();
+  try {
+    const host = c.authority.issue("host", [...scopes], 60000);
+    const guest = c.authority.issue("guest", [...scopes], 60000);
+    const participant = (await c.call(request("presence.join"), guest)) as {
+      id: string;
+    };
+    await c.call(request("takeover", { participantId: participant.id }), guest);
+    await c.call(request("revoke", { id: guest.id }), host, true);
+    assert.deepEqual(c.multiplayerState(), {
+      participants: [],
+      controller: null,
+    });
+    await c.call(request("presence.join"), host);
+    await c.call(request("rebind", { generation: "two" }), host, true);
+    assert.deepEqual(c.multiplayerState(), {
+      participants: [],
+      controller: null,
+    });
+    await assert.rejects(c.call(request("presence.join"), host), /rebind/);
+  } finally {
+    await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a busy observer cannot evict another participant's actionable observation", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opcode-multiplayer-"));
+  const backend = new Fixture("", {});
+  const c = new DesktopController(backend, "one", directory);
+  await c.init();
+  try {
+    const agent = c.authority.issue("agent", [...scopes], 60000);
+    const viewer = c.authority.issue("viewer", ["viewer-read"], 60000);
+    const lease = (await c.call(request("acquire"), agent)) as { id: string };
+    const observation = await c.observe(agent, { kind: "display" });
+    for (let i = 0; i < 40; i++) await c.observe(viewer, { kind: "display" });
+    await c.call(
+      request("input", {
+        leaseId: lease.id,
+        observationId: observation.observationId,
+        action: { kind: "click", x: 1, y: 1 },
+      }),
+      agent,
+    );
+    assert.equal(backend.delivered.length, 1);
+  } finally {
+    await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("failed key release remains journaled and blocks acquisition until restart cleanup succeeds", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opcode-recovery-"));
+  const backend = new Fixture("", {});
+  const controller = new DesktopController(backend, "one", directory);
+  await controller.init();
+  try {
+    const grant = controller.authority.issue("agent", [...scopes], 60000);
+    const lease = (await controller.call(request("acquire"), grant)) as {
+      id: string;
+    };
+    const observation = await controller.observe(grant, { kind: "display" });
+    await controller.call(
+      request("input", {
+        leaseId: lease.id,
+        observationId: observation.observationId,
+        action: { kind: "keyDown", key: "Shift" },
+      }),
+      grant,
+    );
+    backend.failRelease = true;
+    await assert.rejects(
+      controller.call(request("stop"), grant),
+      /could not be released/,
+    );
+    assert.deepEqual(
+      JSON.parse(await readFile(join(directory, "held-input.json"), "utf8"))
+        .keys,
+      ["Shift"],
+    );
+    await assert.rejects(
+      controller.call(request("takeover"), grant),
+      /transition/,
+    );
+    await controller.close();
+    assert.deepEqual(
+      JSON.parse(await readFile(join(directory, "held-input.json"), "utf8"))
+        .keys,
+      ["Shift"],
+    );
+    const recoveredBackend = new Fixture("", {});
+    const recovered = new DesktopController(recoveredBackend, "two", directory);
+    try {
+      await recovered.init();
+      assert.equal(recoveredBackend.releaseCount, 1);
+      assert.deepEqual(
+        JSON.parse(await readFile(join(directory, "held-input.json"), "utf8"))
+          .keys,
+        [],
+      );
+    } finally {
+      await recovered.close();
+    }
+  } finally {
+    await controller.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

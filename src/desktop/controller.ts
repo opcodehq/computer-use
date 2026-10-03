@@ -1,35 +1,41 @@
-import { readFile, writeFile, rename } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
-import { X11Backend, type Geometry } from "./backend.js";
 import { Authority, type Grant } from "./authority.js";
+import type { DesktopBackend, Geometry } from "./backend.js";
+import { Presence } from "./presence.js";
 import {
   Action,
-  methodArguments,
-  Target,
   failure,
+  methodArguments,
   type Observation,
   type Request,
   scopes,
+  Target,
 } from "./protocol.js";
 import { Recorder } from "./recording.js";
+
 type Lease = {
   id: string;
   grantId: string;
+  participantId?: string;
   subject: string;
   owner: "human" | "agent";
   epoch: number;
   expiresAt: number;
 };
-type Frame = Awaited<ReturnType<X11Backend["capture"]>>;
+type Frame = Awaited<ReturnType<DesktopBackend["capture"]>>;
 export class DesktopController {
   readonly authority: Authority;
   readonly recorder: Recorder;
+  readonly presence: Presence;
   private epoch = 1;
   private geometryKey = "";
   private lease?: Lease;
   private fenced = false;
+  private closed = false;
+  private retryFenceAt = 0;
   private observations = new Map<
     string,
     {
@@ -54,17 +60,23 @@ export class DesktopController {
   private timer: ReturnType<typeof setInterval>;
   private recorderGrant?: string;
   constructor(
-    readonly backend: X11Backend,
+    readonly backend: DesktopBackend,
     generation: string,
     private directory: string,
   ) {
     this.authority = new Authority(generation);
+    this.presence = new Presence(this.authority);
     this.recorder = new Recorder(directory, (t) => this.capture(t));
     this.timer = setInterval(() => {
+      this.presence.sweep();
+      if (this.fenced && !this.fenceTask && Date.now() >= this.retryFenceAt)
+        void this.fence().catch(() => {});
       if (
         this.lease &&
         (this.lease.expiresAt <= Date.now() ||
-          !this.authority.valid(this.lease.grantId))
+          !this.authority.valid(this.lease.grantId) ||
+          (this.lease.participantId !== undefined &&
+            !this.presence.has(this.lease.participantId)))
       )
         void this.fence().catch(() => {});
       if (this.recorderGrant && !this.authority.valid(this.recorderGrant)) {
@@ -185,7 +197,21 @@ export class DesktopController {
       epoch: this.epoch,
       sample,
     });
-    while (this.observations.size > 32)
+    // Bound each credential independently so one fast viewer cannot evict every
+    // other participant's observation before their input reaches the broker.
+    let grantCount = 0;
+    for (const record of this.observations.values())
+      if (record.grantId === grant.id) grantCount++;
+    for (const [id, record] of this.observations) {
+      if (
+        performance.now() - record.at > 30000 ||
+        (record.grantId === grant.id && grantCount > 8)
+      ) {
+        this.observations.delete(id);
+        if (record.grantId === grant.id) grantCount--;
+      }
+    }
+    while (this.observations.size > 512)
       this.observations.delete(this.observations.keys().next().value!);
     return value;
   }
@@ -193,47 +219,72 @@ export class DesktopController {
   async fence() {
     if (this.fenceTask) return this.fenceTask;
     this.fenced = true;
+    this.retryFenceAt = Date.now() + 1000;
     this.epoch++;
     this.lease = undefined;
     this.observations.clear();
     this.active?.abort.abort();
     const task = (async () => {
       await this.active?.done.catch(() => {});
-      for (const key of this.heldKeys)
-        await this.backend
-          .input(
-            { kind: "display" },
-            { kind: "keyUp", key },
-            new AbortController().signal,
-          )
-          .catch(() => {});
-      for (const button of this.heldButtons)
-        await this.backend
-          .input(
-            { kind: "display" },
-            { kind: "buttonUp", button },
-            new AbortController().signal,
-          )
-          .catch(() => {});
-      this.heldKeys.clear();
-      this.heldButtons.clear();
-      await this.persistHeld();
+      const abort = new AbortController();
+      const deadline = setTimeout(() => abort.abort(), 10000);
+      try {
+        for (const key of this.heldKeys) {
+          if (abort.signal.aborted) break;
+          try {
+            await this.backend.input(
+              { kind: "display" },
+              { kind: "keyUp", key },
+              abort.signal,
+            );
+            this.heldKeys.delete(key);
+          } catch {
+            /* Preserve failed releases in the recovery journal. */
+          }
+        }
+        for (const button of this.heldButtons) {
+          if (abort.signal.aborted) break;
+          try {
+            await this.backend.input(
+              { kind: "display" },
+              { kind: "buttonUp", button },
+              abort.signal,
+            );
+            this.heldButtons.delete(button);
+          } catch {
+            /* Preserve failed releases in the recovery journal. */
+          }
+        }
+        await this.persistHeld();
+        if (this.heldKeys.size || this.heldButtons.size)
+          throw failure(
+            "input_cleanup_failed",
+            "Held input could not be released. Control remains blocked until cleanup or service recovery succeeds.",
+            "unknown",
+          );
+        this.fenced = false;
+      } finally {
+        clearTimeout(deadline);
+      }
     })();
     this.fenceTask = task;
     try {
       await task;
     } finally {
       this.fenceTask = undefined;
-      this.fenced = false;
     }
   }
   private requireLease(grant: Grant, id: unknown) {
     if (
+      this.closed ||
       this.fenced ||
       !this.lease ||
       this.lease.id !== id ||
       this.lease.grantId !== grant.id ||
-      this.lease.expiresAt <= Date.now()
+      !this.authority.valid(grant.id) ||
+      this.lease.expiresAt <= Date.now() ||
+      (this.lease.participantId !== undefined &&
+        !this.presence.has(this.lease.participantId))
     )
       throw failure(
         "lease_revoked",
@@ -367,7 +418,7 @@ export class DesktopController {
           finish();
           this.active = undefined;
           this.frame = undefined;
-          if (failed) await this.fence();
+          if (failed) await this.fence().catch(() => {});
         }
       })
       .finally(() => this.queued--);
@@ -375,14 +426,22 @@ export class DesktopController {
     return job;
   }
   async call(request: Request, grant: Grant, admin = false): Promise<unknown> {
+    if (this.closed)
+      throw failure("service_closed", "Desktop service is closing.");
     if (request.generation !== this.generation)
       throw failure("generation_mismatch", "Host rebind required.");
+    if (!admin && !this.authority.valid(grant.id))
+      throw failure("permission_denied", "Credential expired or revoked.");
     const methods: Record<string, (typeof scopes)[number]> = {
       health: "observe",
       apps: "observe",
       windows: "observe",
       observe: "observe",
       state: "viewer-read",
+      "presence.list": "viewer-read",
+      "presence.join": "presence",
+      "presence.update": "presence",
+      "presence.leave": "presence",
       acquire: "input-control",
       renew: "input-control",
       release: "input-control",
@@ -407,6 +466,8 @@ export class DesktopController {
         "observe",
         "health",
         "state",
+        "presence.list",
+        "presence.update",
         "windows",
         "apps",
         "recording.list",
@@ -441,16 +502,24 @@ export class DesktopController {
           displayId: this.backend.env.DISPLAY ?? "unknown",
           generation: this.generation,
           displayEpoch: this.epoch,
-          backend: "x11",
+          backend: this.backend.capabilities?.backend ?? "x11",
           mode: "attach",
           geometry: frame.geometry,
           rawCapture: true,
           perception: false,
           recording: await this.recorder.available(),
           input: true,
-          resize: "randr-dependent",
+          multiplayer: {
+            presence: true,
+            cursorSpace: "normalized-target",
+            maxParticipants: 64,
+            heartbeatMs: 5000,
+            participantTtlMs: 15000,
+            inputOwners: 1,
+          },
+          resize: this.backend.capabilities?.resize ?? "randr-dependent",
           coordinateSpace: "image-pixels",
-          limitations: [
+          limitations: this.backend.capabilities?.limitations ?? [
             "No Wayland, audio or synchronized multi-monitor.",
             "External X clients bypass application arbitration.",
           ],
@@ -465,15 +534,30 @@ export class DesktopController {
         return this.backend.windows();
       case "observe":
         return this.observe(g, Target.parse(a.target ?? { kind: "display" }));
+      case "presence.join":
+        return this.presence.join(
+          g,
+          a.name as string | undefined,
+          a.role as "human" | "agent",
+        );
+      case "presence.update":
+        return this.presence.update(
+          g,
+          a.participantId as string,
+          a.cursor as { x: number; y: number } | null | undefined,
+        );
+      case "presence.leave": {
+        const id = a.participantId as string;
+        this.presence.leave(g, id);
+        if (this.lease?.participantId === id) await this.fence();
+        return { left: true };
+      }
+      case "presence.list":
+        return this.multiplayerState();
       case "state":
         return {
-          lease: this.lease
-            ? {
-                owner: this.lease.owner,
-                subject: this.lease.subject,
-                expiresAt: this.lease.expiresAt,
-              }
-            : null,
+          ...this.multiplayerState(),
+          lease: this.controllerState(),
           displayEpoch: this.epoch,
           recordings: this.recorder
             .list()
@@ -481,6 +565,8 @@ export class DesktopController {
         };
       case "acquire":
       case "takeover": {
+        const participantId = a.participantId as string | undefined;
+        if (participantId) this.presence.require(g, participantId);
         if (this.fenced)
           throw failure("lease_conflict", "Control transition is in progress.");
         if (
@@ -490,12 +576,14 @@ export class DesktopController {
         )
           throw failure("lease_conflict", "Display already has a controller.");
         await this.fence();
-        if (!this.authority.valid(g.id) && !admin)
+        if (this.closed || (!this.authority.valid(g.id) && !admin))
           throw failure(
             "permission_denied",
             "Credential expired during takeover.",
           );
+        if (participantId) this.presence.require(g, participantId);
         this.lease = {
+          participantId,
           id: randomUUID(),
           grantId: g.id,
           subject: g.subject,
@@ -571,6 +659,7 @@ export class DesktopController {
           await this.fence();
           await this.recorder.fence();
           this.authority.rebind(next);
+          this.presence.clear();
           this.frame = undefined;
           this.cache.clear();
           return { generation: next };
@@ -623,12 +712,32 @@ export class DesktopController {
     }
     throw failure("unsupported", "Unsupported desktop operation.");
   }
+  private controllerState() {
+    if (
+      !this.lease ||
+      this.lease.expiresAt <= Date.now() ||
+      !this.authority.valid(this.lease.grantId) ||
+      (this.lease.participantId !== undefined &&
+        !this.presence.has(this.lease.participantId))
+    )
+      return null;
+    const { owner, subject, participantId, expiresAt } = this.lease;
+    return { owner, subject, participantId, expiresAt };
+  }
+  multiplayerState() {
+    return {
+      participants: this.presence.list(),
+      controller: this.controllerState(),
+    };
+  }
   async cancelGrantInput(grantId: string) {
     if (this.lease?.grantId === grantId) await this.fence();
   }
   async close() {
+    if (this.closed) return;
+    this.closed = true;
     clearInterval(this.timer);
-    await this.fence();
-    await this.recorder.fence();
+    this.presence.clear();
+    await Promise.allSettled([this.fence(), this.recorder.fence()]);
   }
 }

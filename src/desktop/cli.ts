@@ -1,16 +1,24 @@
-import { parseArgs } from "node:util";
-import { readFile, writeFile, mkdir, lstat, open } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { Config, startDesktop, registryPath } from "./server.js";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+import {
+  desktopCall,
+  readCredential,
+  serviceURL,
+  writeCredential,
+} from "./client.js";
 import {
   errorJSON,
   failure,
-  methodSchema,
   methodArguments,
+  methodSchema,
 } from "./protocol.js";
+import { openSSHTunnel } from "./remote.js";
+import { Config, registryPath, startDesktop } from "./server.js";
+
 const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: {
@@ -27,30 +35,25 @@ const { positionals, values } = parseArgs({
     args: { type: "string" },
     id: { type: "string" },
     help: { type: "boolean" },
+    endpoint: { type: "string" },
+    ssh: { type: "string" },
+    "remote-credential-file": { type: "string" },
+    "local-port": { type: "string" },
+    output: { type: "string" },
+    subject: { type: "string" },
+    role: { type: "string" },
+    "ttl-ms": { type: "string" },
   },
 });
 const command = positionals[0];
-const display = values.display ?? process.env.DISPLAY;
+const display =
+  values.display ??
+  (process.platform === "darwin" ? "macos" : process.env.DISPLAY);
 async function descriptor() {
   if (!display && !values["credential-file"])
     throw failure("invalid_request", "Supply --display or --credential-file.");
   const path = values["credential-file"] ?? registryPath(display!);
-  const info = await lstat(path);
-  if (
-    info.isSymbolicLink() ||
-    !info.isFile() ||
-    info.uid !== process.getuid?.() ||
-    info.mode & 0o077
-  )
-    throw failure(
-      "permission_denied",
-      "Credential file must be private and owned by this user.",
-    );
-  return JSON.parse(await readFile(path, "utf8")) as {
-    endpoint: string;
-    token: string;
-    generation: string;
-  };
+  return readCredential(path);
 }
 async function call(
   method: string,
@@ -58,47 +61,34 @@ async function call(
   signal?: AbortSignal,
 ) {
   const d = await descriptor();
-  const endpoint = new URL(d.endpoint);
-  if (!["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname))
-    throw failure(
-      "permission_denied",
-      "Use a trusted local proxy for remote service access.",
-    );
-  const request = {
-    id: values.id ?? randomUUID(),
-    generation: values.generation ?? d.generation,
+  return desktopCall(
+    { ...d, generation: values.generation ?? d.generation },
     method,
     args,
-  };
-  const response = await fetch(d.endpoint + "/rpc", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + d.token,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
-    signal: signal ?? AbortSignal.timeout(20000),
-  });
-  const result = (await response.json()) as {
-    ok: boolean;
-    result: unknown;
-    error?: { code: string; message: string; delivery: string };
-  };
-  if (!result.ok)
-    throw Object.assign(new Error(result.error?.message), result.error);
-  return result.result;
+    { id: values.id, signal },
+  );
 }
+
 try {
   if (values.help || !command) {
-    console.log(`Opcode display service (Linux X11, protocol 1)
+    console.log(`Opcode shared desktop service (macOS / Linux X11, protocol 1)
 cu desktop-api attach --display :N --generation HOST_GENERATION [--authority PATH]
 cu desktop-api serve --config PATH
 cu desktop-api call --display :N --method observe --args '{"target":{"kind":"display"}}'
 cu desktop-api mcp --display :N
+cu desktop-api attach --display macos --generation HOST_GENERATION
+cu desktop-api share --display macos --subject alice --role controller --output /private/alice.json [--endpoint https://mac.tailnet.ts.net]
+cu desktop-api viewer --credential-file /private/alice.json
+cu desktop-api tunnel --ssh user@mac --remote-credential-file /private/alice.json --output /private/local-alice.json [--local-port 4311]
+Keep tunnel running; use its output credential for MCP or the viewer.
+Roles: viewer (watch and cursor), controller (watch, cursor, input), agent (observe and input).
+Remote credentials use HTTPS or an authenticated loopback SSH tunnel.
 Use --credential-file PATH for a scoped client instead of local host authority.
 Raw capture does not use models. attach preserves the provider display.
 serve owns only the broker; exit never destroys an attached display.`);
   } else if (command === "serve") {
+    if (values["credential-file"])
+      throw failure("invalid_request", "serve cannot use a remote credential.");
     if (!values.config) throw failure("invalid_request", "Supply --config.");
     const config = Config.parse(
       JSON.parse(await readFile(values.config, "utf8")),
@@ -115,6 +105,11 @@ serve owns only the broker; exit never destroys an attached display.`);
     for (const sig of ["SIGTERM", "SIGINT"] as const)
       process.once(sig, () => void service.close().then(() => process.exit(0)));
   } else if (command === "attach") {
+    if (values["credential-file"])
+      throw failure(
+        "invalid_request",
+        "attach is local; use a scoped credential with call, mcp, or viewer.",
+      );
     if (!display || !values.generation)
       throw failure(
         "invalid_request",
@@ -147,9 +142,50 @@ serve owns only the broker; exit never destroys an attached display.`);
       const path = registryPath(display),
         folder = dirname(path);
       await mkdir(folder, { recursive: true, mode: 0o700 });
+      const info = await lstat(folder);
+      if (
+        !info.isDirectory() ||
+        info.isSymbolicLink() ||
+        info.uid !== process.getuid?.() ||
+        info.mode & 0o077
+      )
+        throw failure("permission_denied", "Unsafe broker directory.");
       const configPath = path + ".config";
-      await writeFile(configPath, JSON.stringify(config), { mode: 0o600 });
-      const log = await open(path + ".log", "a", 0o600);
+      const configFile = await open(
+        configPath,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW,
+        0o600,
+      );
+      try {
+        const metadata = await configFile.stat();
+        if (
+          !metadata.isFile() ||
+          metadata.uid !== process.getuid?.() ||
+          metadata.mode & 0o077
+        )
+          throw failure("permission_denied", "Unsafe broker config.");
+        await configFile.truncate(0);
+        await configFile.writeFile(JSON.stringify(config));
+      } finally {
+        await configFile.close();
+      }
+      const log = await open(
+        path + ".log",
+        constants.O_WRONLY |
+          constants.O_CREAT |
+          constants.O_APPEND |
+          constants.O_NOFOLLOW,
+        0o600,
+      );
+      const logInfo = await log.stat();
+      if (
+        !logInfo.isFile() ||
+        logInfo.uid !== process.getuid?.() ||
+        logInfo.mode & 0o077
+      ) {
+        await log.close();
+        throw failure("permission_denied", "Unsafe broker log.");
+      }
       const child = spawn(
         process.execPath,
         [fileURLToPath(import.meta.url), "serve", "--config", configPath],
@@ -174,6 +210,116 @@ serve owns only the broker; exit never destroys an attached display.`);
           "Broker did not become ready. Check the private broker log, display, user, authority and helper path.",
         );
     }
+  } else if (command === "tunnel") {
+    if (!values.ssh || !values["remote-credential-file"] || !values.output)
+      throw failure(
+        "invalid_request",
+        "Supply --ssh, --remote-credential-file and --output.",
+      );
+    const tunnel = await openSSHTunnel({
+      host: values.ssh,
+      remoteCredentialFile: values["remote-credential-file"],
+      output: values.output,
+      port: Number(values["local-port"] ?? 4311),
+    });
+    console.log(
+      JSON.stringify({
+        ready: true,
+        endpoint: tunnel.endpoint,
+        credentialFile: resolve(values.output),
+      }),
+    );
+    const stop = () => void tunnel.close();
+    process.once("SIGTERM", stop);
+    process.once("SIGINT", stop);
+    await tunnel.done;
+    await tunnel.close();
+    process.off("SIGTERM", stop);
+    process.off("SIGINT", stop);
+  } else if (command === "share") {
+    if (!values.subject || !values.output)
+      throw failure(
+        "invalid_request",
+        "Supply --subject and --output for a private scoped credential.",
+      );
+    const role = values.role ?? "viewer";
+    const roles: Record<string, string[]> = {
+      viewer: ["viewer-read", "presence"],
+      controller: ["viewer-read", "observe", "presence", "input-control"],
+      agent: ["observe", "viewer-read", "presence", "input-control"],
+    };
+    if (!Object.hasOwn(roles, role))
+      throw failure(
+        "invalid_request",
+        "Role must be viewer, controller, or agent.",
+      );
+    const d = await descriptor();
+    const endpoint = serviceURL(values.endpoint ?? d.endpoint).href.replace(
+      /\/$/,
+      "",
+    );
+    const ttlMs = Number(values["ttl-ms"] ?? 3600000);
+    if (!Number.isInteger(ttlMs) || ttlMs < 1000 || ttlMs > 3600000)
+      throw failure(
+        "invalid_request",
+        "--ttl-ms must be between 1000 and 3600000.",
+      );
+    const grant = (await call("grant", {
+      subject: values.subject,
+      scopes: roles[role],
+      ttlMs,
+    })) as { id: string; token: string; generation: string; expiresAt: number };
+    try {
+      await writeCredential(values.output, {
+        endpoint,
+        token: grant.token,
+        generation: grant.generation,
+      });
+    } catch (error) {
+      await call("revoke", { id: grant.id }).catch(() => {});
+      throw error;
+    }
+    console.log(
+      JSON.stringify({
+        credentialFile: resolve(values.output),
+        grantId: grant.id,
+        role,
+        expiresAt: grant.expiresAt,
+        endpoint,
+      }),
+    );
+  } else if (command === "viewer") {
+    if (!values["credential-file"])
+      throw failure(
+        "permission_denied",
+        "Use a scoped --credential-file created by share, never the host descriptor.",
+      );
+    const d = await descriptor();
+    const sessionResponse = await fetch(
+      d.endpoint.replace(/\/$/, "") + "/session",
+      {
+        headers: { Authorization: "Bearer " + d.token },
+        redirect: "error",
+        signal: AbortSignal.timeout(10000),
+      },
+    );
+    const session = (await sessionResponse.json()) as {
+      admin?: boolean;
+      scopes?: string[];
+    };
+    if (
+      !sessionResponse.ok ||
+      session.admin ||
+      !session.scopes?.includes("viewer-read")
+    )
+      throw failure(
+        "permission_denied",
+        "A scoped viewer credential is required.",
+      );
+    await desktopCall(d, "presence.list", {});
+    console.log(
+      d.endpoint.replace(/\/$/, "") + "/view#" + encodeURIComponent(d.token),
+    );
   } else if (command === "call") {
     if (!values.method) throw failure("invalid_request", "Supply --method.");
     console.log(
@@ -192,6 +338,7 @@ serve owns only the broker; exit never destroys an attached display.`);
       import("@modelcontextprotocol/sdk/types.js"),
     ]);
     const methods = [
+      "presence.list",
       "health",
       "apps",
       "windows",
@@ -212,6 +359,7 @@ serve owns only the broker; exit never destroys an attached display.`);
       "recording.delete",
     ];
     const reads = new Set([
+      "presence.list",
       "health",
       "apps",
       "windows",
@@ -241,21 +389,85 @@ serve owns only the broker; exit never destroys an attached display.`);
       })),
     }));
     let ownedLease: string | undefined;
+    let participant: { id: string } | undefined;
+    let presenceEnabled = true;
+    let presenceBusy = false;
+    let closing = false;
+    const observations = new Map<
+      string,
+      { target: unknown; image: { width: number; height: number } }
+    >();
+    async function heartbeat() {
+      if (closing || !presenceEnabled || presenceBusy) return;
+      presenceBusy = true;
+      try {
+        if (!participant)
+          participant = (await call("presence.join", { role: "agent" })) as {
+            id: string;
+          };
+        else await call("presence.update", { participantId: participant.id });
+      } catch (error) {
+        if ((error as { code?: string }).code === "permission_denied")
+          presenceEnabled = false;
+        participant = undefined;
+      } finally {
+        presenceBusy = false;
+      }
+    }
+    await heartbeat();
+    const presenceTimer = setInterval(() => void heartbeat(), 4000);
+    presenceTimer.unref();
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const method = methods.find(
         (m) => "computer_" + m.replaceAll(".", "_") === request.params.name,
       );
       try {
         if (!method) throw failure("unsupported", "Unknown tool.");
-        const result = await call(
-          method,
-          request.params.arguments ?? {},
-          extra.signal,
-        );
+        const args = { ...request.params.arguments };
+        if (
+          (method === "acquire" || method === "takeover") &&
+          participant &&
+          !args.participantId
+        )
+          args.participantId = participant.id;
+        if (
+          method === "input" &&
+          participant &&
+          typeof args.observationId === "string"
+        ) {
+          const observation = observations.get(args.observationId);
+          const action = args.action as { x?: number; y?: number } | undefined;
+          if (
+            observation &&
+            typeof action?.x === "number" &&
+            typeof action.y === "number"
+          ) {
+            await call("presence.update", {
+              participantId: participant.id,
+              cursor: {
+                x: action.x / observation.image.width,
+                y: action.y / observation.image.height,
+                target: observation.target,
+              },
+            }).catch(() => {});
+          }
+        }
+        const result = await call(method, args, extra.signal);
         if (method === "acquire" || method === "takeover")
           ownedLease = (result as { id: string }).id;
         if (method === "release" || method === "stop") ownedLease = undefined;
         if (method === "observe") {
+          const observed = result as {
+            observationId: string;
+            target: unknown;
+            image: { width: number; height: number };
+          };
+          observations.set(observed.observationId, {
+            target: observed.target,
+            image: observed.image,
+          });
+          if (observations.size > 32)
+            observations.delete(observations.keys().next().value!);
           const r = result as {
             image: { base64: string; mimeType: string };
             [key: string]: unknown;
@@ -290,6 +502,12 @@ serve owns only the broker; exit never destroys an attached display.`);
       }
     });
     server.onclose = () => {
+      closing = true;
+      clearInterval(presenceTimer);
+      if (participant)
+        void call("presence.leave", { participantId: participant.id }).catch(
+          () => {},
+        );
       if (ownedLease)
         void call("release", { leaseId: ownedLease }).catch(() => {});
     };
