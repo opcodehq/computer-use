@@ -6,7 +6,7 @@ No reasoning model or model key is needed. Linux X11 and macOS are implemented b
 coordinates and limitations, see [Shared Mac desktop](MAC_DESKTOP.md). This is
 not a Wayland, Windows, audio or multi-monitor desktop implementation.
 
-## Install and attach
+## Linux install and attach
 
 ```sh
 npm install --omit=optional @opcodehq/cu
@@ -85,15 +85,21 @@ Actions: `click`, `doubleClick`, `rightClick`, `hover` with `x,y`; `drag` adds
 `toX,toY`; `scroll` has `amount` −30…30 and `axis` x/y; `text` has UTF-8 `text`
 (up to 8000 characters), with optional `pasteKey: "Control+Shift+v"` or `"Shift+Insert"` for terminals (known terminal classes select the matching shortcut automatically; other apps use Control+v); `key` uses names/combinations such as `Control+a`;
 `keyDown`/`keyUp` hold one key; `buttonDown`/`buttonUp` take button 1–3;
-`focus` takes `windowId`; `launch` takes an installed `.desktop` `appId`.
-Launching uses the desktop entry through `gio`, not caller-supplied shell text.
+`focus` takes `windowId`. On Linux, `launch` takes an installed `.desktop`
+`appId` and uses its desktop entry through `gio`, not caller-supplied shell text.
+On macOS, `appId` is an installed application bundle ID. `pasteKey` applies only
+to Linux; Mac text uses Unicode events.
 
 Coordinates are pixels in the delivered image, with explicit identity scale and
 root offsets in `imageToDesktop`. No implicit crops/downscaling/CSS coordinates.
-Full-display input respects keyboard focus. Window-target input raises/focuses
-that window, matching the legacy isolated X11 behavior. Text pastes through that
-X display's clipboard and replaces its previous selection (Shift+Insert also sets PRIMARY); preservation is not
-promised. Verify the resulting app content.
+Full-display input respects keyboard focus. On Linux, window-target input
+raises/focuses that window, matching the legacy isolated X11 behavior. Text
+pastes through that X display's clipboard and replaces its previous selection
+(Shift+Insert also sets PRIMARY); preservation is not promised. On macOS, focus
+the target window and obtain a fresh observation before physical input. Mac
+captures use logical screen points, including on Retina displays; see
+[Mac coordinates and limits](MAC_DESKTOP.md#control-and-coordinates). Verify the
+resulting app content.
 
 Observations are grant-bound, expire after 30 seconds and are consumed by input.
 Geometry, focus and a sampled pixel-difference check reject changed scenes.
@@ -104,18 +110,20 @@ and 512 observations overall. Observations older than 30 seconds are evicted. Du
 512-entry cache; reuse with different content is rejected. Never retry uncertain
 input automatically or promise exactly-once delivery across crashes.
 
-One broker serves all new MCP, CLI and viewer clients. While it is registered,
-legacy window input and browser mutations on that display fail closed instead
+One broker serves all `desktop-api` MCP, CLI and viewer clients. On Linux, while
+it is registered, legacy window input and browser mutations on that display fail closed instead
 of opening a second control path. Existing window/browser workflows still work
 on displays without a broker. The native helper and arbitrary X clients remain
-outside this application-level trust boundary.
+outside this application-level trust boundary. Mac semantic sessions and local
+hardware input also remain outside the shared broker; see the
+[Mac control boundaries](MAC_DESKTOP.md#boundaries-and-recovery).
 
 ## Viewing and reverse proxies
 
 GET `<endpoint>/view#TOKEN` opens the standalone viewer. Fragment tokens are
 removed from the address bar and held in sessionStorage; API requests use
-Authorization headers. Add `?windowId=ID` before the fragment for window-only viewing. A viewer grant needs `viewer-read`; human control also
-needs `input-control`. Observer buttons are hidden and mutations are rejected
+Authorization headers. Add `?windowId=ID` before the fragment for window-only viewing. A viewer grant needs `viewer-read`; joining and showing a cursor also need
+`presence`, and human control needs `input-control`. Observer buttons are hidden and mutations are rejected
 server-side. Never use the host master token as a viewer link.
 
 For embedding, use `/session` for generation/scopes, `/frame` for a PNG observation,

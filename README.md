@@ -118,9 +118,11 @@ A new session is another way to refresh discovery. The skill teaches the agent t
 find or launch the right app, choose exact controls, verify results, and recover
 from local blockers while retaining ownership of the full workflow. You should not have to dictate each click.
 
-**A cloud coding workspace needs a Mac command bridge supplied by its host.**
-Install and execute Jev on the Mac through that bridge. A Linux shell or cloud MCP
-process alone cannot operate your Mac. For shared remote desktops, use the scoped `cu desktop-api` SSH/HTTPS bridge described below.
+**A cloud coding workspace can use the scoped `cu desktop-api` SSH/HTTPS bridge**
+to operate an existing Mac desktop; see [remote desktops and multiplayer](#remote-desktops-and-multiplayer).
+The Mac must run the broker and permission-owning helper. The semantic `cu observe`
+and `cu execute` commands above still run on the Mac, through shell access or a
+command bridge supplied by the host.
 
 ## Optional delegated workflows
 

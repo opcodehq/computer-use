@@ -7,10 +7,13 @@ created. Apps already signed in on the target Mac keep their existing sessions.
 
 ## Prepare the target Mac
 
-Use macOS 14 or newer with an active graphical login. Install this version of CU
-and its permission-owning helper:
+Use macOS 14 or newer with an active graphical login, Node.js 20+, Bun 1.3.10+,
+and Xcode Command Line Tools. Install the npm CLI build containing these commands and its
+permission-owning helper; the legacy standalone bundle does not contain
+`desktop-api`:
 
 ```sh
+# Install the package built from this version, then initialize the Mac helper:
 cu install
 cu doctor
 ```
@@ -60,7 +63,8 @@ cu desktop-api call --display macos --method revoke --args '{"id":"GRANT_ID"}'
 
 For another computer, establish normal SSH authentication and verify the target's
 host key first. A Tailnet SSH hostname or an SSH configuration alias works. On the
-client computer, keep this tunnel command running:
+client computer, install the same npm CLI build (Node.js 20+); remote clients do
+not need to install a local native helper. Keep this tunnel command running:
 
 ```sh
 cu desktop-api tunnel --ssh user@my-mac \
