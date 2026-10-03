@@ -30,6 +30,7 @@ export class MacBackend implements DesktopBackend {
       "Local applications and physical input bypass broker arbitration.",
     ],
   };
+  private supportedKeys?: Promise<Set<string>>;
   constructor(readonly driver: MacDriver) {}
   async geometry(target: Target): Promise<Geometry> {
     return GeometrySchema.parse(
@@ -81,6 +82,37 @@ export class MacBackend implements DesktopBackend {
     return { geometry: result.geometry, png, ppm: Buffer.alloc(0), sample };
   }
   async prepareAction(action: Action) {
+    if (
+      action.kind === "key" ||
+      action.kind === "keyDown" ||
+      action.kind === "keyUp"
+    ) {
+      // Query the native source of truth before the controller journals held input.
+      this.supportedKeys ??= this.driver
+        .request("desktopKeys")
+        .then(
+          (value) =>
+            new Set(
+              z.array(z.string().min(1).max(100)).min(1).max(256).parse(value),
+            ),
+        );
+      const supported = await this.supportedKeys;
+      const parts = action.key.split("+");
+      const modifiers = new Set(["Meta", "Control", "Alt", "Shift"]);
+      if (
+        parts.some(
+          (key) =>
+            !supported.has(key) &&
+            !(key.length === 1 && supported.has(key.toLowerCase())),
+        ) ||
+        (action.kind !== "key" && parts.length !== 1) ||
+        parts.slice(0, -1).some((key) => !modifiers.has(key))
+      )
+        throw failure(
+          "unsupported",
+          "Unsupported Mac key or modifier combination.",
+        );
+    }
     return action;
   }
   async input(target: Target, action: Action, signal: AbortSignal) {

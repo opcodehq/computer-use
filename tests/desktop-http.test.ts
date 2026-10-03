@@ -31,6 +31,7 @@ else console.log('{}');
         display: `:${100000 + Math.floor(Math.random() * 100000000)}`,
         uid: process.getuid!(),
         generation: "one",
+        origin: "http://127.0.0.1:4311",
         helper,
         directory: join(directory, "data"),
       });
@@ -74,6 +75,16 @@ else console.log('{}');
           ttlMs: 60000,
         })
       ).result;
+      for (const [origin, expected] of [
+        ["http://127.0.0.1:4311", 200],
+        [new URL(endpoint).origin, 200],
+        ["https://untrusted.example", 403],
+      ] as const) {
+        const response = await fetch(endpoint + "/session", {
+          headers: { Authorization: `Bearer ${alice.token}`, Origin: origin },
+        });
+        assert.equal(response.status, expected);
+      }
       const anonymous = await fetch(endpoint + "/frame");
       assert.equal(anonymous.status, 403);
       const ap = (await rpc(alice.token, "presence.join", { name: "Alice" }))

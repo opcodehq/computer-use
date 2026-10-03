@@ -101,3 +101,28 @@ test("Mac launch accepts only installed bundle IDs and resize is explicit", asyn
   await assert.rejects(backend.resize(1000, 800), /not supported/);
   assert.equal(backend.capabilities.resize, false);
 });
+test("Mac unsupported held keys fail during preparation before native dispatch", async () => {
+  const { backend, calls, replies } = fixture();
+  replies.desktopKeys = ["a", "Meta", "Control", "Alt", "Shift", "Enter"];
+  await assert.rejects(
+    backend.prepareAction({ kind: "keyDown", key: "NotAKey" }),
+    /Unsupported Mac key/,
+  );
+  await assert.rejects(
+    backend.prepareAction({ kind: "key", key: "a+Enter" }),
+    /Unsupported Mac key/,
+  );
+  await assert.rejects(
+    backend.prepareAction({ kind: "keyDown", key: "Meta+a" }),
+    /Unsupported Mac key/,
+  );
+  assert.deepEqual(
+    await backend.prepareAction({ kind: "key", key: "Meta+A" }),
+    { kind: "key", key: "Meta+A" },
+  );
+  assert.deepEqual(
+    await backend.prepareAction({ kind: "keyUp", key: "Meta" }),
+    { kind: "keyUp", key: "Meta" },
+  );
+  assert.deepEqual(calls, [{ method: "desktopKeys", args: {} }]);
+});

@@ -23,6 +23,7 @@ struct SavedElement {
     var lastCaptureImage: CGImage?
     var virtualCursor: CGPoint?
     var desktopHeldModifiers: CGEventFlags = []
+    let desktopKeyCodes: [String: CGKeyCode] = ["a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,"1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"9":25,"7":26,"8":28,"0":29,"o":31,"u":32,"i":34,"p":35,"l":37,"j":38,"k":40,"n":45,"m":46,"Enter":36,"Tab":48,"Space":49,"Backspace":51,"Escape":53,"Meta":55,"Shift":56,"Alt":58,"Control":59,"Home":115,"PageUp":116,"Delete":117,"End":119,"PageDown":121,"ArrowLeft":123,"ArrowRight":124,"ArrowDown":125,"ArrowUp":126,"F1":122,"F2":120,"F3":99,"F4":118,"F5":96,"F6":97,"F7":98,"F8":100,"F9":101,"F10":109,"F11":103,"F12":111]
     let foregroundAllowed = ProcessInfo.processInfo.environment["JEV_INTERACTION_MODE"] == "foreground"
     var activatedRenderers = Set<String>()
     var observationErrors = 0
@@ -719,8 +720,7 @@ struct SavedElement {
             event.flags = desktopHeldModifiers
             event.setIntegerValueField(.mouseEventClickState, value: count); event.post(tap: .cghidEventTap)
         }
-        let codes: [String: CGKeyCode] = ["a":0,"s":1,"d":2,"f":3,"h":4,"g":5,"z":6,"x":7,"c":8,"v":9,"b":11,"q":12,"w":13,"e":14,"r":15,"y":16,"t":17,"1":18,"2":19,"3":20,"4":21,"6":22,"5":23,"9":25,"7":26,"8":28,"0":29,"o":31,"u":32,"i":34,"p":35,"l":37,"j":38,"k":40,"n":45,"m":46,"Enter":36,"Tab":48,"Space":49,"Backspace":51,"Escape":53,"Meta":55,"Shift":56,"Alt":58,"Control":59,"Home":115,"PageUp":116,"Delete":117,"End":119,"PageDown":121,"ArrowLeft":123,"ArrowRight":124,"ArrowDown":125,"ArrowUp":126,"F1":122,"F2":120,"F3":99,"F4":118,"F5":96,"F6":97,"F7":98,"F8":100,"F9":101,"F10":109,"F11":103,"F12":111]
-        func code(_ key: String) -> CGKeyCode? { codes[key] ?? (key.count == 1 ? codes[key.lowercased()] : nil) }
+        func code(_ key: String) -> CGKeyCode? { desktopKeyCodes[key] ?? (key.count == 1 ? desktopKeyCodes[key.lowercased()] : nil) }
         func keyboard(_ key: String, _ down: Bool, _ flags: CGEventFlags = []) throws {
             guard let c = code(key), let event = CGEvent(keyboardEventSource: nil, virtualKey: c, keyDown: down) else {
                 throw DriverFailure(code: "unsupported", message: "Unsupported named key.")
@@ -802,6 +802,7 @@ struct SavedElement {
 
     func handle(_ request: [String: Any]) async throws -> Any {
         switch request["method"] as? String {
+        case "desktopKeys": return desktopKeyCodes.keys.sorted()
         case "desktopGeometry": return try desktopGeometry(request)
         case "desktopWindows": return try desktopWindows()
         case "desktopState": return desktopState()

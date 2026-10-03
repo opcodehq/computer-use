@@ -374,6 +374,8 @@ export class DesktopController {
           () => abort.abort(),
           Math.max(1, Math.min(10000, currentLease.expiresAt - Date.now())),
         );
+        const previouslyHeldKeys = new Set(this.heldKeys);
+        const previouslyHeldButtons = new Set(this.heldButtons);
         if (action.kind === "keyDown") this.heldKeys.add(action.key);
         if (action.kind === "buttonDown") this.heldButtons.add(action.button);
         const transientButtons = ["click", "doubleClick", "drag"].includes(
@@ -396,8 +398,10 @@ export class DesktopController {
           await this.persistHeld();
           await this.backend.input(record.value.target, action, abort.signal);
           for (const button of transientButtons)
-            this.heldButtons.delete(button);
-          for (const key of transientKeys) this.heldKeys.delete(key);
+            if (!previouslyHeldButtons.has(button))
+              this.heldButtons.delete(button);
+          for (const key of transientKeys)
+            if (!previouslyHeldKeys.has(key)) this.heldKeys.delete(key);
           if (action.kind === "keyUp") this.heldKeys.delete(action.key);
           if (action.kind === "buttonUp")
             this.heldButtons.delete(action.button);

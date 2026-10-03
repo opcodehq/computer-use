@@ -341,3 +341,51 @@ test("failed key release remains journaled and blocks acquisition until restart 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("transient shortcuts and clicks preserve preexisting held input until explicit release or takeover", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opcode-held-input-"));
+  const backend = new Fixture("", {});
+  const c = new DesktopController(backend, "one", directory);
+  await c.init();
+  try {
+    const grant = c.authority.issue("agent", [...scopes], 60000);
+    const human = c.authority.issue("human", [...scopes], 60000);
+    const lease = (await c.call(request("acquire"), grant)) as { id: string };
+    const input = async (action: Action) => {
+      const observation = await c.observe(grant, { kind: "display" });
+      await c.call(
+        request("input", {
+          leaseId: lease.id,
+          observationId: observation.observationId,
+          action,
+        }),
+        grant,
+      );
+    };
+    const held = async () =>
+      JSON.parse(await readFile(join(directory, "held-input.json"), "utf8"));
+    await input({ kind: "keyDown", key: "Control" });
+    await input({ kind: "buttonDown", button: 1 });
+    await input({ kind: "key", key: "Control+a" });
+    await input({ kind: "text", text: "hello", pasteKey: "Control+v" });
+    await input({ kind: "click", x: 1, y: 1 });
+    assert.deepEqual(await held(), { keys: ["Control"], buttons: [1] });
+    await input({ kind: "keyUp", key: "Control" });
+    await input({ kind: "buttonUp", button: 1 });
+    assert.deepEqual(await held(), { keys: [], buttons: [] });
+    await input({ kind: "keyDown", key: "Control" });
+    await input({ kind: "buttonDown", button: 1 });
+    await input({ kind: "key", key: "Control+a" });
+    await input({ kind: "click", x: 1, y: 1 });
+    await c.call(request("takeover"), human);
+    assert.equal(backend.releaseCount, 2);
+    assert.equal(
+      backend.delivered.filter((action) => action.kind === "buttonUp").length,
+      2,
+    );
+    assert.deepEqual(await held(), { keys: [], buttons: [] });
+  } finally {
+    await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

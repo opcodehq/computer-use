@@ -32,5 +32,7 @@ jobs:
         if: runner.os == 'macOS'
         env:
           CU_NATIVE_DIR: ${{ runner.temp }}/opcode-native
-        run: bash scripts/build-native.sh
+        run: |
+          bash scripts/build-native.sh
+          node scripts/test-macos-desktop.mjs
       - run: bun test
