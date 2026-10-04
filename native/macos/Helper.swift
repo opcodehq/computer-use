@@ -8,6 +8,40 @@ import ApplicationServices
 @main struct HelperMain {
     @MainActor static var busy = false
     @MainActor static var guide: Process?
+    @MainActor static var activeClients = 0
+    // Blocking sockets must not occupy Swift's cooperative executor: enough
+    // idle peers would otherwise prevent every pending reply from resuming.
+    // Admission caps this queue at 32 client operations plus one accept.
+    static let socketIO = DispatchQueue(label: "com.opcodehq.helper.socket-io", qos: .userInitiated, attributes: .concurrent)
+    static func blockingIO<T>(_ operation: @escaping () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            socketIO.async { continuation.resume(returning: operation()) }
+        }
+    }
+    static func readChunk(_ client: Int32) async -> Data? {
+        await blockingIO {
+            var bytes = [UInt8](repeating: 0, count: 8192)
+            while true {
+                let count = Darwin.read(client, &bytes, bytes.count)
+                if count < 0 && errno == EINTR { continue }
+                return count > 0 ? Data(bytes.prefix(count)) : nil
+            }
+        }
+    }
+    static func writeReply(_ data: Data, client: Int32) async -> Bool {
+        await blockingIO {
+            data.withUnsafeBytes { raw -> Bool in
+                var offset = 0
+                while offset < raw.count {
+                    let count = Darwin.write(client, raw.baseAddress!.advanced(by: offset), raw.count - offset)
+                    if count < 0 && errno == EINTR { continue }
+                    if count <= 0 { return false }
+                    offset += count
+                }
+                return true
+            }
+        }
+    }
     @MainActor static func showPermissionGuide(_ kind: String) {
         if guide?.isRunning == true { guide?.terminate() }
         let process = Process()
@@ -90,32 +124,28 @@ import ApplicationServices
         }
         guard bound == 0, chmod(path, 0o600) == 0, listen(server, 16) == 0 else { exit(1) }
         while true {
-            let client = await Task.detached { accept(server, nil, nil) }.value
+            let client = await blockingIO { Darwin.accept(server, nil, nil) }
             guard client >= 0 else { continue }
             var uid: uid_t = 0, gid: gid_t = 0
             guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { Darwin.close(client); continue }
+            guard activeClients < 32 else { Darwin.close(client); continue }
+            // A peer that stops reading must not retain a reply thread forever.
+            var writeTimeout = timeval(tv_sec: 10, tv_usec: 0)
+            guard setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &writeTimeout, socklen_t(MemoryLayout<timeval>.size)) == 0 else {
+                Darwin.close(client); continue
+            }
+            activeClients += 1
             let driver = Driver()
-            Task.detached {
-                defer { Darwin.close(client) }
+            Task { @MainActor in
+                defer { Darwin.close(client); activeClients -= 1 }
                 var buffer = Data()
-                var chunk = [UInt8](repeating: 0, count: 8192)
-                while true {
-                    let count = Darwin.read(client, &chunk, chunk.count)
-                    if count <= 0 { break }
-                    buffer.append(contentsOf: chunk.prefix(count))
+                while let chunk = await readChunk(client) {
+                    buffer.append(chunk)
                     while let newline = buffer.firstIndex(of: 10) {
                         let line = Data(buffer[..<newline]); buffer.removeSubrange(...newline)
                         if line.count > 128_000 { return }
                         let data = await reply(line, driver: driver)
-                        let sent = data.withUnsafeBytes { raw -> Bool in
-                            var offset = 0
-                            while offset < raw.count {
-                                let count = Darwin.write(client, raw.baseAddress!.advanced(by: offset), raw.count - offset)
-                                if count <= 0 { return false }
-                                offset += count
-                            }
-                            return true
-                        }
+                        let sent = await writeReply(data, client: client)
                         if !sent { return }
                     }
                     if buffer.count > 128_000 { break }

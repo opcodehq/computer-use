@@ -54,6 +54,27 @@ const enabled =
     try {
       const first = await start();
       for (let i = 0; i < 7; i++) connections.push(await connectMacDriver());
+      // Seven idle sockets must not occupy the executor needed for this reply.
+      let idleDeadline: ReturnType<typeof setTimeout> | undefined;
+      try {
+        assert.deepEqual(
+          await Promise.race([
+            first.request("cancel"),
+            new Promise((_, reject) => {
+              idleDeadline = setTimeout(
+                () =>
+                  reject(
+                    Error("Idle native sockets starved an active request."),
+                  ),
+                3000,
+              );
+            }),
+          ]),
+          { cancelled: true },
+        );
+      } finally {
+        clearTimeout(idleDeadline);
+      }
       const results = await Promise.allSettled(connections.map(acquire));
       const winners = results.flatMap((result, index) =>
         result.status === "fulfilled" ? [index] : [],
