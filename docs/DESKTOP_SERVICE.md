@@ -2,10 +2,11 @@
 
 Opcode owns capture, input arbitration, scoped local credentials and recording.
 The host owns workspace accounts, provider allocation, ingress and lifecycle.
-No reasoning model or model key is needed. Linux X11 is the backend implemented
-here; this is not a Wayland, Windows, audio or multi-monitor implementation.
+No reasoning model or model key is needed. Linux X11 and macOS are implemented backends. For Mac installation, permissions,
+coordinates and limitations, see [Shared Mac desktop](MAC_DESKTOP.md). This is
+not a Wayland, Windows, audio or multi-monitor desktop implementation.
 
-## Install and attach
+## Linux install and attach
 
 ```sh
 npm install --omit=optional @opcodehq/cu
@@ -84,37 +85,45 @@ Actions: `click`, `doubleClick`, `rightClick`, `hover` with `x,y`; `drag` adds
 `toX,toY`; `scroll` has `amount` −30…30 and `axis` x/y; `text` has UTF-8 `text`
 (up to 8000 characters), with optional `pasteKey: "Control+Shift+v"` or `"Shift+Insert"` for terminals (known terminal classes select the matching shortcut automatically; other apps use Control+v); `key` uses names/combinations such as `Control+a`;
 `keyDown`/`keyUp` hold one key; `buttonDown`/`buttonUp` take button 1–3;
-`focus` takes `windowId`; `launch` takes an installed `.desktop` `appId`.
-Launching uses the desktop entry through `gio`, not caller-supplied shell text.
+`focus` takes `windowId`. On Linux, `launch` takes an installed `.desktop`
+`appId` and uses its desktop entry through `gio`, not caller-supplied shell text.
+On macOS, `appId` is an installed application bundle ID. `pasteKey` applies only
+to Linux; Mac text uses Unicode events.
 
 Coordinates are pixels in the delivered image, with explicit identity scale and
 root offsets in `imageToDesktop`. No implicit crops/downscaling/CSS coordinates.
-Full-display input respects keyboard focus. Window-target input raises/focuses
-that window, matching the legacy isolated X11 behavior. Text pastes through that
-X display's clipboard and replaces its previous selection (Shift+Insert also sets PRIMARY); preservation is not
-promised. Verify the resulting app content.
+Full-display input respects keyboard focus. On Linux, window-target input
+raises/focuses that window, matching the legacy isolated X11 behavior. Text
+pastes through that X display's clipboard and replaces its previous selection
+(Shift+Insert also sets PRIMARY); preservation is not promised. On macOS, focus
+the target window and obtain a fresh observation before physical input. Mac
+captures use logical screen points, including on Retina displays; see
+[Mac coordinates and limits](MAC_DESKTOP.md#control-and-coordinates). Verify the
+resulting app content.
 
 Observations are grant-bound, expire after 30 seconds and are consumed by input.
 Geometry, focus and a sampled pixel-difference check reject changed scenes.
 This check tolerates small changes but can reject animation and cannot detect
 every UI change. There is a time-of-check/time-of-use gap; dispatch acknowledgement
-is not verified app success. There are at most 16 queued mutations and 32 retained
-observations. Duplicate mutation IDs return the last result while present in the
+is not verified app success. There are at most 16 queued mutations, eight retained observations per grant,
+and 512 observations overall. Observations older than 30 seconds are evicted. Duplicate mutation IDs return the last result while present in the
 512-entry cache; reuse with different content is rejected. Never retry uncertain
 input automatically or promise exactly-once delivery across crashes.
 
-One broker serves all new MCP, CLI and viewer clients. While it is registered,
-legacy window input and browser mutations on that display fail closed instead
+One broker serves all `desktop-api` MCP, CLI and viewer clients. On Linux, while
+it is registered, legacy window input and browser mutations on that display fail closed instead
 of opening a second control path. Existing window/browser workflows still work
 on displays without a broker. The native helper and arbitrary X clients remain
-outside this application-level trust boundary.
+outside this application-level trust boundary. Mac semantic sessions and local
+hardware input also remain outside the shared broker; see the
+[Mac control boundaries](MAC_DESKTOP.md#boundaries-and-recovery).
 
 ## Viewing and reverse proxies
 
 GET `<endpoint>/view#TOKEN` opens the standalone viewer. Fragment tokens are
 removed from the address bar and held in sessionStorage; API requests use
-Authorization headers. Add `?windowId=ID` before the fragment for window-only viewing. A viewer grant needs `viewer-read`; human control also
-needs `input-control`. Observer buttons are hidden and mutations are rejected
+Authorization headers. Add `?windowId=ID` before the fragment for window-only viewing. A viewer grant needs `viewer-read`; joining and showing a cursor also need
+`presence`, and human control needs `input-control`. Observer buttons are hidden and mutations are rejected
 server-side. Never use the host master token as a viewer link.
 
 For embedding, use `/session` for generation/scopes, `/frame` for a PNG observation,
@@ -133,6 +142,54 @@ verifies the current account/workspace and selects a scoped backend credential.
 Keep a stable scoped credential per client session; do not mint a new grant per request.
 The proxy must revoke that credential when host authorization is withdrawn.
 The reference callback is not a replacement for host account authentication.
+
+## Multiplayer and remote clients
+
+`share` creates a private, expiring credential without printing its token:
+
+```sh
+cu desktop-api share --display :1 --subject alice --role controller --output /private/alice.json
+cu desktop-api viewer --credential-file /private/alice.json
+cu desktop-api mcp --credential-file /private/alice.json
+```
+
+Use a separate grant for each person or agent. `viewer` grants watch/presence;
+`controller` and `agent` also grant input. Administrative descriptors are refused
+by the viewer. The host can revoke each returned grant ID independently.
+
+Add `--endpoint https://desktop.example.com/desktop` when sharing through your
+configured TLS proxy. Remote plaintext endpoints and redirects are rejected.
+For SSH, use `tunnel --ssh HOST --remote-credential-file ABSOLUTE_PATH --output
+LOCAL_PATH`. It uses existing OpenSSH keys/config and known hosts, waits for a
+confirmed forward before sending any token, and deletes its local credential
+when closed. The tunnel remains in the foreground; it does not reconnect or
+replay input. Configure the broker `--origin http://127.0.0.1:4311` for the
+default forwarded viewer port, or match your chosen `--local-port`. The native
+broker origin remains permitted. HTTPS ingress uses its exact configured origin.
+
+The additive `presence` scope admits these methods:
+
+| Method | Behavior |
+| --- | --- |
+| `presence.join` | Optional `name` and display-only `role` (`human`/`agent`); returns a participant ID/color. |
+| `presence.update` | Owned `participantId`, optional `cursor` (null to hide, otherwise normalized `x,y` and optional `target`, default display); refreshes its heartbeat. |
+| `presence.leave` | Removes the owned participant and fences its associated input lease. |
+| `presence.list` | Requires `viewer-read`; returns participants and current controller, never lease IDs. |
+
+Join is bounded to eight tabs per grant and 64 participants per broker. Heartbeats
+expire after 15 seconds; update rate is capped at 25/second per participant.
+Names are untrusted display text. Roles do not confer permission. `acquire` and
+`takeover` accept an optional owned `participantId`; legacy clients continue
+working without presence. Revocation, expiry, shutdown and rebind remove presence
+and fence associated input. MCP joins as an agent and maintains its heartbeat;
+the browser updates cursor position at most ten times per second. `/frame` carries
+presence and controller state alongside the image. Window cursors are only shown
+in viewers of that same target.
+
+Actual OS input remains exclusive. Visual cursor updates never inject input.
+Takeover waits for previous input cleanup. Failed held-key/button releases remain
+journaled and block control until cleanup succeeds, including after restart.
+Local hardware and programs outside this broker remain outside arbitration.
 
 ## Recording
 

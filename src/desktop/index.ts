@@ -1,11 +1,19 @@
-export { Config, startDesktop, registryPath } from "./server.js";
+export type { Credential } from "./client.js";
 export {
-  Request,
+  desktopCall,
+  readCredential,
+  serviceURL,
+  writeCredential,
+} from "./client.js";
+export type { Observation, Participant, Scope } from "./protocol.js";
+export {
   Action,
-  Target,
-  scopes,
-  VERSION,
   methodArguments,
   methodSchema,
+  Request,
+  scopes,
+  Target,
+  VERSION,
 } from "./protocol.js";
-export type { Observation, Scope } from "./protocol.js";
+export { openSSHTunnel } from "./remote.js";
+export { Config, registryPath, startDesktop } from "./server.js";

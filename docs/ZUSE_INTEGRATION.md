@@ -22,10 +22,12 @@ and recordings. The agent keeps its own model and subscription.
 5. On restore or fork, call `rebind` with a new generation before allowing access.
    On workspace shutdown, call `shutdown`; the provider owns the desktop itself.
 
-For an agent, grant `observe`, `input-control`, and optionally `viewer-read` for
-state inspection. Recording scopes are separate. For a person watching, grant
-`viewer-read`; add `input-control` only when they may take over. Keep host/admin
-credentials in Zuse's backend. Grant tokens expire and can be revoked early.
+For an agent, grant `observe`, `input-control`, `viewer-read`, and `presence`
+for the multiplayer MCP workflow. Recording scopes are separate. For a person
+watching with a named cursor, grant `viewer-read` and `presence`; add
+`input-control` only when they may take over. The `share --role agent`,
+`share --role viewer`, and `share --role controller` commands create these scope
+sets. Keep host/admin credentials in Zuse's backend. Grant tokens expire and can be revoked early.
 
 The agent loop is **acquire → observe → input → observe**. Renew its lease while
 working. A person taking control interrupts agent input; after control is returned,
@@ -35,7 +37,8 @@ click or text action is never automatically repeated.
 The complete commands, credential format, HTTP methods, errors and limitations
 are in [the service contract](DESKTOP_SERVICE.md). A host proxy example is in
 [desktop-proxy.mjs](../examples/desktop-proxy.mjs). Use a stable scoped grant per
-viewer session; Zuse still validates its own login on every proxy request.
+viewer session; configure the broker with the exact external viewer origin
+and any proxy base path. Zuse still validates its own login on every proxy request.
 
 ## What still needs a Zuse test
 

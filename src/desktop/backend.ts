@@ -1,10 +1,11 @@
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { homedir } from "node:os";
 import { execFile } from "node:child_process";
+import { readdir, readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { ppmToPNG } from "../linux/capture.js";
-import { failure, type Target, type Action } from "./protocol.js";
+import { type Action, failure, type Target } from "./protocol.js";
+
 const exec = promisify(execFile);
 export interface Geometry {
   id: number;
@@ -15,7 +16,25 @@ export interface Geometry {
   pid?: number;
   title?: string;
 }
-export class X11Backend {
+export interface DesktopBackend {
+  readonly env: NodeJS.ProcessEnv;
+  readonly capabilities?: {
+    backend: string;
+    resize: string | false;
+    limitations: string[];
+  };
+  geometry(target: Target): Promise<Geometry>;
+  windows(): Promise<Geometry[]>;
+  apps(): Promise<{ id: string; name: string; path?: string }[]>;
+  state(): Promise<{ focus: number; appClass?: string; x: number; y: number }>;
+  capture(
+    target: Target,
+  ): Promise<{ geometry: Geometry; png: Buffer; ppm: Buffer; sample: Buffer }>;
+  prepareAction(action: Action): Promise<Action>;
+  input(target: Target, action: Action, signal: AbortSignal): Promise<void>;
+  resize(width: number, height: number): Promise<Geometry>;
+}
+export class X11Backend implements DesktopBackend {
   constructor(
     readonly helper: string,
     readonly env: NodeJS.ProcessEnv,
