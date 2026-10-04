@@ -31,7 +31,10 @@ export function serviceURL(endpoint: string) {
 }
 
 export async function readCredential(path: string): Promise<Credential> {
-  const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const file = await open(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
   try {
     const info = await file.stat();
     if (

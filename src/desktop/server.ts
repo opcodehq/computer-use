@@ -68,9 +68,9 @@ export async function startDesktop(input: z.input<typeof Config>) {
         ),
       ),
     );
-    // A loopback reservation avoids stale filesystem sockets after a Mac crash.
-    // Linux retains its namespace-wide abstract X11 display reservation.
-    if (mac) lock.listen(49152 + (config.uid % 16000), "127.0.0.1", resolve);
+    // Linux keeps its namespace-wide abstract X11 reservation. Mac ownership is
+    // acquired below through the persistent native helper connection and flock.
+    if (mac) resolve();
     else
       lock.listen(
         "\0opcode-desktop-" +
@@ -99,6 +99,9 @@ export async function startDesktop(input: z.input<typeof Config>) {
     const macDriver = mac ? await connectMacDriver() : undefined;
     startupDriver = macDriver;
     if (macDriver) {
+      z.object({ locked: z.literal(true) }).parse(
+        await macDriver.request("desktopLock"),
+      );
       const status = z
         .object({ accessibility: z.boolean(), screenRecording: z.boolean() })
         .parse(await macDriver.request("status"));
@@ -388,21 +391,25 @@ export async function startDesktop(input: z.input<typeof Config>) {
       if (closed) return;
       closed = true;
       await controller.close();
-      macDriver?.close?.();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
-      await unlink(path).catch(() => {});
+      // A lost Mac helper connection can release flock before HTTP teardown.
+      // Never unlink its descriptor here: a successor may already have replaced
+      // it. A stale private descriptor is probed on attach and replaced by the
+      // next owner, exactly as after an abrupt process exit.
+      if (!mac) await unlink(path).catch(() => {});
+      macDriver?.close?.();
       lock.close();
     };
     return { controller, endpoint: descriptor.endpoint, path, close };
   } catch (error) {
     await startupController?.close().catch(() => {});
-    startupDriver?.close?.();
     startupServer?.closeAllConnections();
     if (startupServer?.listening)
       await new Promise<void>((resolve) =>
         startupServer!.close(() => resolve()),
       );
+    startupDriver?.close?.();
     lock.close();
     throw error;
   }

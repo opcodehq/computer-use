@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -93,4 +94,33 @@ test("remote calls bind generation, disable redirects and never retry uncertain 
     desktopCall(credential, "input", {}, { fetch: wrong }),
     (error: any) => error.delivery === "unknown",
   );
+});
+
+test("credential named pipes are rejected without waiting for a writer", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cu-credential-fifo-"));
+  try {
+    const path = join(dir, "credential.fifo");
+    execFileSync("mkfifo", ["-m", "600", path]);
+    // Isolate the reader so a blocking-open regression cannot hang the suite.
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--eval",
+        `
+      import { readCredential } from ${JSON.stringify(new URL("../src/desktop/client.ts", import.meta.url).href)};
+      try {
+        await readCredential(${JSON.stringify(path)});
+        process.exit(2);
+      } catch (error) {
+        process.exit(error.code === "permission_denied" ? 0 : 3);
+      }
+    `,
+      ],
+      { timeout: 3000, encoding: "utf8" },
+    );
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

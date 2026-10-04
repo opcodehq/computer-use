@@ -295,14 +295,12 @@ serve owns only the broker; exit never destroys an attached display.`);
         "Use a scoped --credential-file created by share, never the host descriptor.",
       );
     const d = await descriptor();
-    const sessionResponse = await fetch(
-      d.endpoint.replace(/\/$/, "") + "/session",
-      {
-        headers: { Authorization: "Bearer " + d.token },
-        redirect: "error",
-        signal: AbortSignal.timeout(10000),
-      },
-    );
+    const viewerBase = serviceURL(d.endpoint).href.replace(/\/$/, "");
+    const sessionResponse = await fetch(viewerBase + "/session", {
+      headers: { Authorization: "Bearer " + d.token },
+      redirect: "error",
+      signal: AbortSignal.timeout(10000),
+    });
     const session = (await sessionResponse.json()) as {
       admin?: boolean;
       scopes?: string[];
@@ -317,9 +315,7 @@ serve owns only the broker; exit never destroys an attached display.`);
         "A scoped viewer credential is required.",
       );
     await desktopCall(d, "presence.list", {});
-    console.log(
-      d.endpoint.replace(/\/$/, "") + "/view#" + encodeURIComponent(d.token),
-    );
+    console.log(viewerBase + "/view#" + encodeURIComponent(d.token));
   } else if (command === "call") {
     if (!values.method) throw failure("invalid_request", "Supply --method.");
     console.log(

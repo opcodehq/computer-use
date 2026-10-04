@@ -147,6 +147,13 @@ required. The service does not reconnect and replay a pending native action. It
 persists broker-held key/button state for release on startup. Broker shutdown
 does not terminate apps or the installed helper.
 
+Mac broker ownership uses a private per-user file lock held by its native helper
+connection. Disconnects and crashes release the kernel lock automatically; the
+lock file remains in place and must not be deleted to recover a session. The
+private broker descriptor also remains after shutdown so a retiring broker cannot
+remove a replacement broker's descriptor. `attach` checks the recorded endpoint
+and replaces a stale descriptor when it starts the next broker.
+
 The viewer polls screenshots; this is not a video/audio streaming transport.
 Optional recordings require an installed FFmpeg with `libx264`; health reports
 whether recording is available. Capture can include private desktop contents, so
