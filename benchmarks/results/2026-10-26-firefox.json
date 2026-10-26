@@ -1,0 +1,3576 @@
+{
+  "kind": "native-firefox-cli-benchmark",
+  "baselineRevision": "7c1a96f56ff675fff796f7df0eaa5a4bbf3ce8b3",
+  "candidateSourceSha256": "3745b77f636f613d7f49ec98c34ea32f4a15d0f53f17f90a2daaa34f988be179",
+  "candidateSources": {
+    "native/linux/x11.c": "d893f14c2a967ed2b5638cdbde3b505ee9c65b49799ca42a3001bff847558a21",
+    "src/desktop/backend.ts": "ed932c3b56615cb1e3cdcbddf0a0f93c72d7a49767bded8e8529af5ee46be30f",
+    "src/desktop/controller.ts": "dedb18d27cd33095c47b0c03bd2734fc1ce1c96de45273aa581f306c971d8189",
+    "src/desktop/protocol.ts": "2e1c86a8941c4a793b60bf3fe3b10c87b60588bdffbf5442252278a0ae01f0c2",
+    "src/desktop/client.ts": "6d0780fbebee811cb921e155e398bf5fc3b500d6be5f9b8f68cc92c998055c11",
+    "src/desktop/server.ts": "9767070382a41496aab3fc8d3c0245cded182b9ef1a68c3a72279a825b8c96fb",
+    "src/linux/x11-session.ts": "85ee8d5c92829e65c758f25c7c97a3668c4a9f17eafb57484db641d795d6d484",
+    "src/linux/capture.ts": "0886402fec888b216e0828d40a81ed59fd25dbddda175ee7ee97dd130c19adb5"
+  },
+  "createdAt": "2026-10-26T13:50:00.210Z",
+  "node": "v24.18.1",
+  "firefox": "Mozilla Firefox 158.0",
+  "resolution": "1920x1080",
+  "limits": "Isolated Firefox profile; synthetic read-only release dashboard; native CLI navigation and screenshots, no outer model or live Play latency. Startup excluded. No application writes.",
+  "samples": [
+    {
+      "competitor": "baseline",
+      "sample": 0,
+      "status": "passed",
+      "elapsedMs": 3356.46453,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 189.769135
+        },
+        {
+          "stage": "input:key",
+          "ms": 190.52966399999968
+        },
+        {
+          "stage": "observe",
+          "ms": 177.21075500000006
+        },
+        {
+          "stage": "input:text",
+          "ms": 504.1115599999998
+        },
+        {
+          "stage": "observe",
+          "ms": 180.44837199999984
+        },
+        {
+          "stage": "input:key",
+          "ms": 196.45519000000058
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.66299600000002
+        },
+        {
+          "stage": "final-observe",
+          "ms": 191.5916560000005
+        },
+        {
+          "stage": "observe",
+          "ms": 185.9318830000002
+        },
+        {
+          "stage": "input:key",
+          "ms": 197.42230100000052
+        },
+        {
+          "stage": "observe",
+          "ms": 186.76574299999993
+        },
+        {
+          "stage": "input:text",
+          "ms": 494.80533600000035
+        },
+        {
+          "stage": "observe",
+          "ms": 182.65593700000045
+        },
+        {
+          "stage": "input:key",
+          "ms": 198.3952220000001
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.51154899999983
+        },
+        {
+          "stage": "final-observe",
+          "ms": 177.4168580000005
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 0,
+      "status": "passed",
+      "elapsedMs": 2834.6161899999997,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 156.50361499999963
+        },
+        {
+          "stage": "input:key",
+          "ms": 127.95441599999958
+        },
+        {
+          "stage": "observe",
+          "ms": 156.82197900000028
+        },
+        {
+          "stage": "input:text",
+          "ms": 128.19999999999982
+        },
+        {
+          "stage": "observe",
+          "ms": 158.13215300000047
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.48710899999969
+        },
+        {
+          "stage": "final-observe",
+          "ms": 153.56217299999844
+        },
+        {
+          "stage": "observe",
+          "ms": 153.64660399999957
+        },
+        {
+          "stage": "input:key",
+          "ms": 128.76778600000034
+        },
+        {
+          "stage": "observe",
+          "ms": 161.1591669999998
+        },
+        {
+          "stage": "input:text",
+          "ms": 134.76370300000053
+        },
+        {
+          "stage": "observe",
+          "ms": 158.04408300000068
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.838583000000654
+        },
+        {
+          "stage": "final-observe",
+          "ms": 147.07008999999925
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 0,
+      "status": "passed",
+      "elapsedMs": 1112.075514,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 154.06100800000058
+        },
+        {
+          "stage": "sequence",
+          "ms": 186.86036400000012
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.78534700000091
+        },
+        {
+          "stage": "final-observe",
+          "ms": 150.45790800000032
+        },
+        {
+          "stage": "observe",
+          "ms": 152.09686599999986
+        },
+        {
+          "stage": "sequence",
+          "ms": 184.16755399999965
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.35956199999964
+        },
+        {
+          "stage": "final-observe",
+          "ms": 154.57000499999958
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 1,
+      "status": "passed",
+      "elapsedMs": 1116.8245370000004,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 152.5198309999996
+        },
+        {
+          "stage": "sequence",
+          "ms": 174.4071649999987
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.17876199999955
+        },
+        {
+          "stage": "final-observe",
+          "ms": 162.39891100000023
+        },
+        {
+          "stage": "observe",
+          "ms": 152.6137920000001
+        },
+        {
+          "stage": "sequence",
+          "ms": 184.40655700000025
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.463244999999006
+        },
+        {
+          "stage": "final-observe",
+          "ms": 155.5788649999995
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 1,
+      "status": "passed",
+      "elapsedMs": 2866.0441450000017,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 154.23084000000017
+        },
+        {
+          "stage": "input:key",
+          "ms": 129.83288900000116
+        },
+        {
+          "stage": "observe",
+          "ms": 159.6718010000004
+        },
+        {
+          "stage": "input:text",
+          "ms": 128.26400100000137
+        },
+        {
+          "stage": "observe",
+          "ms": 160.8506150000012
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.725422000001345
+        },
+        {
+          "stage": "final-observe",
+          "ms": 151.1572269999997
+        },
+        {
+          "stage": "observe",
+          "ms": 156.50064500000008
+        },
+        {
+          "stage": "input:key",
+          "ms": 139.58407699999952
+        },
+        {
+          "stage": "observe",
+          "ms": 166.27576500000032
+        },
+        {
+          "stage": "input:text",
+          "ms": 135.8308560000005
+        },
+        {
+          "stage": "observe",
+          "ms": 160.9042150000023
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.827353000000585
+        },
+        {
+          "stage": "final-observe",
+          "ms": 164.61523699999816
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 1,
+      "status": "passed",
+      "elapsedMs": 3704.6826720000026,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 209.1717239999998
+        },
+        {
+          "stage": "input:key",
+          "ms": 231.3622319999995
+        },
+        {
+          "stage": "observe",
+          "ms": 205.5418239999999
+        },
+        {
+          "stage": "input:text",
+          "ms": 523.1270169999989
+        },
+        {
+          "stage": "observe",
+          "ms": 205.9064870000002
+        },
+        {
+          "stage": "input:key",
+          "ms": 216.69817899999907
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.31814300000042
+        },
+        {
+          "stage": "final-observe",
+          "ms": 204.16061799999807
+        },
+        {
+          "stage": "observe",
+          "ms": 210.32541700000002
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.8587609999995
+        },
+        {
+          "stage": "observe",
+          "ms": 194.18973800000094
+        },
+        {
+          "stage": "input:text",
+          "ms": 517.8863889999993
+        },
+        {
+          "stage": "observe",
+          "ms": 215.5066250000018
+        },
+        {
+          "stage": "input:key",
+          "ms": 235.14045500000066
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.346668999998656
+        },
+        {
+          "stage": "final-observe",
+          "ms": 220.7413830000005
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 2,
+      "status": "passed",
+      "elapsedMs": 3426.0079729999998,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 186.7865950000014
+        },
+        {
+          "stage": "input:key",
+          "ms": 206.25025200000164
+        },
+        {
+          "stage": "observe",
+          "ms": 193.69522199999847
+        },
+        {
+          "stage": "input:text",
+          "ms": 505.0159370000001
+        },
+        {
+          "stage": "observe",
+          "ms": 191.9822329999988
+        },
+        {
+          "stage": "input:key",
+          "ms": 204.1462790000005
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.642931999998837
+        },
+        {
+          "stage": "final-observe",
+          "ms": 201.6278110000021
+        },
+        {
+          "stage": "observe",
+          "ms": 192.90308300000106
+        },
+        {
+          "stage": "input:key",
+          "ms": 200.3639669999975
+        },
+        {
+          "stage": "observe",
+          "ms": 189.19991200000004
+        },
+        {
+          "stage": "input:text",
+          "ms": 506.1882310000001
+        },
+        {
+          "stage": "observe",
+          "ms": 185.76137300000119
+        },
+        {
+          "stage": "input:key",
+          "ms": 194.60610299999826
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.43714899999759
+        },
+        {
+          "stage": "final-observe",
+          "ms": 191.1595840000009
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 2,
+      "status": "passed",
+      "elapsedMs": 2970.927230999998,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 155.97003100000074
+        },
+        {
+          "stage": "input:key",
+          "ms": 134.31879000000117
+        },
+        {
+          "stage": "observe",
+          "ms": 171.7079470000026
+        },
+        {
+          "stage": "input:text",
+          "ms": 139.68141900000046
+        },
+        {
+          "stage": "observe",
+          "ms": 170.58394500000213
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.8054140000022
+        },
+        {
+          "stage": "final-observe",
+          "ms": 166.28658599999835
+        },
+        {
+          "stage": "observe",
+          "ms": 168.13836699999956
+        },
+        {
+          "stage": "input:key",
+          "ms": 134.1904089999989
+        },
+        {
+          "stage": "observe",
+          "ms": 162.9044589999976
+        },
+        {
+          "stage": "input:text",
+          "ms": 134.86123600000064
+        },
+        {
+          "stage": "observe",
+          "ms": 163.40590399999928
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.459499000000505
+        },
+        {
+          "stage": "final-observe",
+          "ms": 163.02693999999974
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 2,
+      "status": "passed",
+      "elapsedMs": 1211.3896779999995,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 167.58274099999835
+        },
+        {
+          "stage": "sequence",
+          "ms": 191.58830899999884
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.87940900000103
+        },
+        {
+          "stage": "final-observe",
+          "ms": 171.11277100000007
+        },
+        {
+          "stage": "observe",
+          "ms": 181.69294900000023
+        },
+        {
+          "stage": "sequence",
+          "ms": 198.70172900000034
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.371053999999276
+        },
+        {
+          "stage": "final-observe",
+          "ms": 167.51480100000117
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 3,
+      "status": "passed",
+      "elapsedMs": 1158.0405830000018,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 162.21745199999714
+        },
+        {
+          "stage": "sequence",
+          "ms": 182.7704109999977
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.49372399999993
+        },
+        {
+          "stage": "final-observe",
+          "ms": 153.87268899999617
+        },
+        {
+          "stage": "observe",
+          "ms": 159.8907360000012
+        },
+        {
+          "stage": "sequence",
+          "ms": 196.28391199999896
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.74721799999679
+        },
+        {
+          "stage": "final-observe",
+          "ms": 165.22958500000095
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 3,
+      "status": "passed",
+      "elapsedMs": 2929.376022000004,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 159.60472200000368
+        },
+        {
+          "stage": "input:key",
+          "ms": 130.82369199999812
+        },
+        {
+          "stage": "observe",
+          "ms": 157.39510799999698
+        },
+        {
+          "stage": "input:text",
+          "ms": 130.94201299999986
+        },
+        {
+          "stage": "observe",
+          "ms": 166.4332890000005
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.63292999999976
+        },
+        {
+          "stage": "final-observe",
+          "ms": 167.5113610000044
+        },
+        {
+          "stage": "observe",
+          "ms": 169.49784299999737
+        },
+        {
+          "stage": "input:key",
+          "ms": 145.37205399999948
+        },
+        {
+          "stage": "observe",
+          "ms": 153.93022999999812
+        },
+        {
+          "stage": "input:text",
+          "ms": 140.45889900000475
+        },
+        {
+          "stage": "observe",
+          "ms": 160.85111699999834
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.338948000004166
+        },
+        {
+          "stage": "final-observe",
+          "ms": 160.63775400000304
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 3,
+      "status": "passed",
+      "elapsedMs": 3345.735421000005,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 183.45683999999892
+        },
+        {
+          "stage": "input:key",
+          "ms": 193.8600460000016
+        },
+        {
+          "stage": "observe",
+          "ms": 195.66358599999512
+        },
+        {
+          "stage": "input:text",
+          "ms": 510.5974639999986
+        },
+        {
+          "stage": "observe",
+          "ms": 182.02465400000074
+        },
+        {
+          "stage": "input:key",
+          "ms": 192.4207099999985
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.976815000001807
+        },
+        {
+          "stage": "final-observe",
+          "ms": 186.46280300000217
+        },
+        {
+          "stage": "observe",
+          "ms": 173.95441299999948
+        },
+        {
+          "stage": "input:key",
+          "ms": 198.85113199999614
+        },
+        {
+          "stage": "observe",
+          "ms": 192.65028200000233
+        },
+        {
+          "stage": "input:text",
+          "ms": 502.6684169999935
+        },
+        {
+          "stage": "observe",
+          "ms": 188.31835400000273
+        },
+        {
+          "stage": "input:key",
+          "ms": 192.76080399999773
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.018255000002682
+        },
+        {
+          "stage": "final-observe",
+          "ms": 176.77726599999733
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 4,
+      "status": "passed",
+      "elapsedMs": 3420.329845,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 173.52820800000336
+        },
+        {
+          "stage": "input:key",
+          "ms": 203.02576799999952
+        },
+        {
+          "stage": "observe",
+          "ms": 182.576181000004
+        },
+        {
+          "stage": "input:text",
+          "ms": 512.9629319999949
+        },
+        {
+          "stage": "observe",
+          "ms": 192.17939800000022
+        },
+        {
+          "stage": "input:key",
+          "ms": 206.19750399999612
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.96908500000427
+        },
+        {
+          "stage": "final-observe",
+          "ms": 186.27787200000603
+        },
+        {
+          "stage": "observe",
+          "ms": 184.1745379999993
+        },
+        {
+          "stage": "input:key",
+          "ms": 207.2242449999976
+        },
+        {
+          "stage": "observe",
+          "ms": 192.81140400000004
+        },
+        {
+          "stage": "input:text",
+          "ms": 509.80275700000493
+        },
+        {
+          "stage": "observe",
+          "ms": 196.13702300000296
+        },
+        {
+          "stage": "input:key",
+          "ms": 205.88127099999838
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.91811400000006
+        },
+        {
+          "stage": "final-observe",
+          "ms": 191.68588299999828
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 4,
+      "status": "passed",
+      "elapsedMs": 2977.644124999999,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 157.797633999995
+        },
+        {
+          "stage": "input:key",
+          "ms": 142.87594700000045
+        },
+        {
+          "stage": "observe",
+          "ms": 164.21545599999808
+        },
+        {
+          "stage": "input:text",
+          "ms": 140.1347259999966
+        },
+        {
+          "stage": "observe",
+          "ms": 167.3128910000014
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.96449600000051
+        },
+        {
+          "stage": "final-observe",
+          "ms": 161.33384400000068
+        },
+        {
+          "stage": "observe",
+          "ms": 163.39341699999932
+        },
+        {
+          "stage": "input:key",
+          "ms": 146.41875599999912
+        },
+        {
+          "stage": "observe",
+          "ms": 170.5655659999975
+        },
+        {
+          "stage": "input:text",
+          "ms": 134.62503500000457
+        },
+        {
+          "stage": "observe",
+          "ms": 161.56884600000194
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.300999000006414
+        },
+        {
+          "stage": "final-observe",
+          "ms": 158.11685799999395
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 4,
+      "status": "passed",
+      "elapsedMs": 1155.2668059999996,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 157.81022500000108
+        },
+        {
+          "stage": "sequence",
+          "ms": 184.32424999999785
+        },
+        {
+          "stage": "page-ready",
+          "ms": 61.58337900000333
+        },
+        {
+          "stage": "final-observe",
+          "ms": 168.18445000000065
+        },
+        {
+          "stage": "observe",
+          "ms": 161.39197499999864
+        },
+        {
+          "stage": "sequence",
+          "ms": 189.47294800000236
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.13179200000013
+        },
+        {
+          "stage": "final-observe",
+          "ms": 156.22391700000298
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 5,
+      "status": "passed",
+      "elapsedMs": 1150.9091090000002,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 155.38123700000142
+        },
+        {
+          "stage": "sequence",
+          "ms": 188.84840199999599
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.90870100000029
+        },
+        {
+          "stage": "final-observe",
+          "ms": 160.4529840000032
+        },
+        {
+          "stage": "observe",
+          "ms": 157.50124099999812
+        },
+        {
+          "stage": "sequence",
+          "ms": 191.9478270000036
+        },
+        {
+          "stage": "page-ready",
+          "ms": 61.63919900000474
+        },
+        {
+          "stage": "final-observe",
+          "ms": 158.32630000000063
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 5,
+      "status": "passed",
+      "elapsedMs": 2944.366227999999,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 161.01123999999982
+        },
+        {
+          "stage": "input:key",
+          "ms": 126.75180800000089
+        },
+        {
+          "stage": "observe",
+          "ms": 165.5663610000047
+        },
+        {
+          "stage": "input:text",
+          "ms": 130.9346050000022
+        },
+        {
+          "stage": "observe",
+          "ms": 159.64778500000102
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.585822000000917
+        },
+        {
+          "stage": "final-observe",
+          "ms": 162.9809729999979
+        },
+        {
+          "stage": "observe",
+          "ms": 162.8160810000045
+        },
+        {
+          "stage": "input:key",
+          "ms": 137.9303529999961
+        },
+        {
+          "stage": "observe",
+          "ms": 165.50599100000545
+        },
+        {
+          "stage": "input:text",
+          "ms": 136.79531900000438
+        },
+        {
+          "stage": "observe",
+          "ms": 165.1772869999986
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.62105799999699
+        },
+        {
+          "stage": "final-observe",
+          "ms": 156.83459399999992
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 5,
+      "status": "passed",
+      "elapsedMs": 3393.5932600000015,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 191.24250899999606
+        },
+        {
+          "stage": "input:key",
+          "ms": 194.18203200000426
+        },
+        {
+          "stage": "observe",
+          "ms": 201.48541300000215
+        },
+        {
+          "stage": "input:text",
+          "ms": 513.8774580000027
+        },
+        {
+          "stage": "observe",
+          "ms": 185.5089549999975
+        },
+        {
+          "stage": "input:key",
+          "ms": 201.36555199999566
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.319978999999876
+        },
+        {
+          "stage": "final-observe",
+          "ms": 185.56960600000457
+        },
+        {
+          "stage": "observe",
+          "ms": 179.3592370000042
+        },
+        {
+          "stage": "input:key",
+          "ms": 196.23396499999944
+        },
+        {
+          "stage": "observe",
+          "ms": 196.56747899999755
+        },
+        {
+          "stage": "input:text",
+          "ms": 502.9036650000053
+        },
+        {
+          "stage": "observe",
+          "ms": 187.47901799999818
+        },
+        {
+          "stage": "input:key",
+          "ms": 196.2354950000008
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.679521999998542
+        },
+        {
+          "stage": "final-observe",
+          "ms": 187.37382600000274
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 6,
+      "status": "passed",
+      "elapsedMs": 3442.8748010000054,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 194.99216100000194
+        },
+        {
+          "stage": "input:key",
+          "ms": 191.76611599999887
+        },
+        {
+          "stage": "observe",
+          "ms": 201.99818000000232
+        },
+        {
+          "stage": "input:text",
+          "ms": 516.7861310000008
+        },
+        {
+          "stage": "observe",
+          "ms": 192.73801600000297
+        },
+        {
+          "stage": "input:key",
+          "ms": 199.5237530000013
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.546901000001526
+        },
+        {
+          "stage": "final-observe",
+          "ms": 188.29576699999598
+        },
+        {
+          "stage": "observe",
+          "ms": 196.9039929999999
+        },
+        {
+          "stage": "input:key",
+          "ms": 202.3482539999968
+        },
+        {
+          "stage": "observe",
+          "ms": 191.1723589999965
+        },
+        {
+          "stage": "input:text",
+          "ms": 513.5503459999891
+        },
+        {
+          "stage": "observe",
+          "ms": 182.6453840000031
+        },
+        {
+          "stage": "input:key",
+          "ms": 201.594935000001
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.68477300000086
+        },
+        {
+          "stage": "final-observe",
+          "ms": 190.02872599998955
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 6,
+      "status": "passed",
+      "elapsedMs": 2908.489938999992,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 159.59835600000224
+        },
+        {
+          "stage": "input:key",
+          "ms": 148.7228049999976
+        },
+        {
+          "stage": "observe",
+          "ms": 168.13089100000798
+        },
+        {
+          "stage": "input:text",
+          "ms": 136.80163100000937
+        },
+        {
+          "stage": "observe",
+          "ms": 166.45544299999892
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.391640000001644
+        },
+        {
+          "stage": "final-observe",
+          "ms": 157.48177199999918
+        },
+        {
+          "stage": "observe",
+          "ms": 160.89913000000524
+        },
+        {
+          "stage": "input:key",
+          "ms": 132.00862799999595
+        },
+        {
+          "stage": "observe",
+          "ms": 160.53696699999273
+        },
+        {
+          "stage": "input:text",
+          "ms": 134.04038999999466
+        },
+        {
+          "stage": "observe",
+          "ms": 159.7315879999951
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.297148999990895
+        },
+        {
+          "stage": "final-observe",
+          "ms": 156.31332899999688
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 6,
+      "status": "passed",
+      "elapsedMs": 1114.7645270000066,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 155.0439650000044
+        },
+        {
+          "stage": "sequence",
+          "ms": 181.69551399999182
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.969121000001905
+        },
+        {
+          "stage": "final-observe",
+          "ms": 150.26532099999895
+        },
+        {
+          "stage": "observe",
+          "ms": 155.4191290000017
+        },
+        {
+          "stage": "sequence",
+          "ms": 180.822273999991
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.65001900000789
+        },
+        {
+          "stage": "final-observe",
+          "ms": 154.9950850000023
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 7,
+      "status": "passed",
+      "elapsedMs": 1146.1799499999906,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 164.70701399999962
+        },
+        {
+          "stage": "sequence",
+          "ms": 187.69024099998933
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.437644999998156
+        },
+        {
+          "stage": "final-observe",
+          "ms": 168.61531799999648
+        },
+        {
+          "stage": "observe",
+          "ms": 152.0369420000061
+        },
+        {
+          "stage": "sequence",
+          "ms": 186.3681260000012
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.814259999999194
+        },
+        {
+          "stage": "final-observe",
+          "ms": 151.4458750000049
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 7,
+      "status": "passed",
+      "elapsedMs": 2893.9059200000047,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 150.2991430000111
+        },
+        {
+          "stage": "input:key",
+          "ms": 126.23663299999316
+        },
+        {
+          "stage": "observe",
+          "ms": 162.55408899999748
+        },
+        {
+          "stage": "input:text",
+          "ms": 130.04450600000564
+        },
+        {
+          "stage": "observe",
+          "ms": 165.44298200000776
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.10103700000036
+        },
+        {
+          "stage": "final-observe",
+          "ms": 165.61827500000072
+        },
+        {
+          "stage": "observe",
+          "ms": 162.5125590000098
+        },
+        {
+          "stage": "input:key",
+          "ms": 137.57555000000866
+        },
+        {
+          "stage": "observe",
+          "ms": 158.94371899998805
+        },
+        {
+          "stage": "input:text",
+          "ms": 138.64815200000885
+        },
+        {
+          "stage": "observe",
+          "ms": 162.98638499999652
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.618912000005366
+        },
+        {
+          "stage": "final-observe",
+          "ms": 157.9914989999961
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 7,
+      "status": "passed",
+      "elapsedMs": 3488.0630799999926,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 200.41810399999667
+        },
+        {
+          "stage": "input:key",
+          "ms": 211.7562109999999
+        },
+        {
+          "stage": "observe",
+          "ms": 199.60990499999025
+        },
+        {
+          "stage": "input:text",
+          "ms": 514.0198660000024
+        },
+        {
+          "stage": "observe",
+          "ms": 181.52325300000666
+        },
+        {
+          "stage": "input:key",
+          "ms": 215.49089300000924
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.854693999994197
+        },
+        {
+          "stage": "final-observe",
+          "ms": 199.55670499999542
+        },
+        {
+          "stage": "observe",
+          "ms": 193.57385700001032
+        },
+        {
+          "stage": "input:key",
+          "ms": 221.784593999997
+        },
+        {
+          "stage": "observe",
+          "ms": 195.60148100000515
+        },
+        {
+          "stage": "input:text",
+          "ms": 503.748311000003
+        },
+        {
+          "stage": "observe",
+          "ms": 178.45186900001136
+        },
+        {
+          "stage": "input:key",
+          "ms": 201.3010440000071
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.22895900000003
+        },
+        {
+          "stage": "final-observe",
+          "ms": 196.20528700000432
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 8,
+      "status": "passed",
+      "elapsedMs": 3392.344867000007,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 185.80110100000456
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.58565599999565
+        },
+        {
+          "stage": "observe",
+          "ms": 192.9613609999942
+        },
+        {
+          "stage": "input:text",
+          "ms": 509.48693700000877
+        },
+        {
+          "stage": "observe",
+          "ms": 195.91120400000364
+        },
+        {
+          "stage": "input:key",
+          "ms": 196.6015320000006
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.650752999994438
+        },
+        {
+          "stage": "final-observe",
+          "ms": 191.80152799999632
+        },
+        {
+          "stage": "observe",
+          "ms": 186.13554499999736
+        },
+        {
+          "stage": "input:key",
+          "ms": 203.14279499999247
+        },
+        {
+          "stage": "observe",
+          "ms": 188.3094790000032
+        },
+        {
+          "stage": "input:text",
+          "ms": 503.8249330000108
+        },
+        {
+          "stage": "observe",
+          "ms": 177.67297100000724
+        },
+        {
+          "stage": "input:key",
+          "ms": 198.3874719999876
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.58583300000464
+        },
+        {
+          "stage": "final-observe",
+          "ms": 176.07447200000752
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 8,
+      "status": "passed",
+      "elapsedMs": 2930.7607540000026,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 157.84520799999882
+        },
+        {
+          "stage": "input:key",
+          "ms": 132.86120800000208
+        },
+        {
+          "stage": "observe",
+          "ms": 162.4098789999989
+        },
+        {
+          "stage": "input:text",
+          "ms": 140.74173700000392
+        },
+        {
+          "stage": "observe",
+          "ms": 169.55859899999632
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.467141000000993
+        },
+        {
+          "stage": "final-observe",
+          "ms": 157.26785199998994
+        },
+        {
+          "stage": "observe",
+          "ms": 156.5685749999975
+        },
+        {
+          "stage": "input:key",
+          "ms": 132.811017
+        },
+        {
+          "stage": "observe",
+          "ms": 158.57539600000018
+        },
+        {
+          "stage": "input:text",
+          "ms": 138.26536900000065
+        },
+        {
+          "stage": "observe",
+          "ms": 159.78890099999262
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.317399999999907
+        },
+        {
+          "stage": "final-observe",
+          "ms": 171.40714000001026
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 8,
+      "status": "passed",
+      "elapsedMs": 1142.3317700000043,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 158.98107100000198
+        },
+        {
+          "stage": "sequence",
+          "ms": 184.56158799999685
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.7167300000001
+        },
+        {
+          "stage": "final-observe",
+          "ms": 159.89859199999773
+        },
+        {
+          "stage": "observe",
+          "ms": 153.21100700000534
+        },
+        {
+          "stage": "sequence",
+          "ms": 187.62278200000583
+        },
+        {
+          "stage": "page-ready",
+          "ms": 61.43622799999139
+        },
+        {
+          "stage": "final-observe",
+          "ms": 160.9548039999936
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 9,
+      "status": "passed",
+      "elapsedMs": 1173.538790999999,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 153.86268399999244
+        },
+        {
+          "stage": "sequence",
+          "ms": 189.08622900000773
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.75384000000486
+        },
+        {
+          "stage": "final-observe",
+          "ms": 153.41933900000004
+        },
+        {
+          "stage": "observe",
+          "ms": 163.06552699999884
+        },
+        {
+          "stage": "sequence",
+          "ms": 204.5204320000048
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.82638099999167
+        },
+        {
+          "stage": "final-observe",
+          "ms": 174.60067600000184
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 9,
+      "status": "passed",
+      "elapsedMs": 3086.419741999998,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 159.50891800000682
+        },
+        {
+          "stage": "input:key",
+          "ms": 144.90168399999675
+        },
+        {
+          "stage": "observe",
+          "ms": 178.92033500000252
+        },
+        {
+          "stage": "input:text",
+          "ms": 154.73715499999525
+        },
+        {
+          "stage": "observe",
+          "ms": 180.61535400000867
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.26272900000913
+        },
+        {
+          "stage": "final-observe",
+          "ms": 178.51498100000026
+        },
+        {
+          "stage": "observe",
+          "ms": 197.11844900000142
+        },
+        {
+          "stage": "input:key",
+          "ms": 161.78264400000626
+        },
+        {
+          "stage": "observe",
+          "ms": 159.81566100000055
+        },
+        {
+          "stage": "input:text",
+          "ms": 129.57086200000776
+        },
+        {
+          "stage": "observe",
+          "ms": 163.6019340000057
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.76311299999361
+        },
+        {
+          "stage": "final-observe",
+          "ms": 159.53061800000432
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 9,
+      "status": "passed",
+      "elapsedMs": 3835.696450000003,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 174.787479000006
+        },
+        {
+          "stage": "input:key",
+          "ms": 195.21862899999542
+        },
+        {
+          "stage": "observe",
+          "ms": 195.64714299999468
+        },
+        {
+          "stage": "observe",
+          "ms": 174.76862899999833
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.3341650000075
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.453462000004947
+        },
+        {
+          "stage": "final-observe",
+          "ms": 192.54766900000686
+        },
+        {
+          "stage": "observe",
+          "ms": 195.00020599999698
+        },
+        {
+          "stage": "input:key",
+          "ms": 199.72815899999114
+        },
+        {
+          "stage": "observe",
+          "ms": 184.69288999999117
+        },
+        {
+          "stage": "input:text",
+          "ms": 520.5226360000088
+        },
+        {
+          "stage": "observe",
+          "ms": 185.47499900001276
+        },
+        {
+          "stage": "input:key",
+          "ms": 201.2321260000026
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.516631999998935
+        },
+        {
+          "stage": "final-observe",
+          "ms": 181.99493100000836
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 10,
+      "status": "passed",
+      "elapsedMs": 3401.9007550000097,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 180.49356399998942
+        },
+        {
+          "stage": "input:key",
+          "ms": 203.07719700000598
+        },
+        {
+          "stage": "observe",
+          "ms": 200.19326400000136
+        },
+        {
+          "stage": "input:text",
+          "ms": 503.1388520000037
+        },
+        {
+          "stage": "observe",
+          "ms": 184.90092300000833
+        },
+        {
+          "stage": "input:key",
+          "ms": 199.05218199999945
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.649924000012106
+        },
+        {
+          "stage": "final-observe",
+          "ms": 186.8565949999902
+        },
+        {
+          "stage": "observe",
+          "ms": 184.07833400000527
+        },
+        {
+          "stage": "input:key",
+          "ms": 202.16404600000533
+        },
+        {
+          "stage": "observe",
+          "ms": 191.03888199999346
+        },
+        {
+          "stage": "input:text",
+          "ms": 509.64688499999465
+        },
+        {
+          "stage": "observe",
+          "ms": 192.6038600000029
+        },
+        {
+          "stage": "input:key",
+          "ms": 197.0410189999966
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.27093899999454
+        },
+        {
+          "stage": "final-observe",
+          "ms": 189.844729000004
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 10,
+      "status": "passed",
+      "elapsedMs": 2878.0024980000017,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 149.00548100000015
+        },
+        {
+          "stage": "input:key",
+          "ms": 137.64898399999947
+        },
+        {
+          "stage": "observe",
+          "ms": 161.14420700000483
+        },
+        {
+          "stage": "input:text",
+          "ms": 129.7956659999909
+        },
+        {
+          "stage": "observe",
+          "ms": 161.23607800000173
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.402699999991455
+        },
+        {
+          "stage": "final-observe",
+          "ms": 149.20252299999993
+        },
+        {
+          "stage": "observe",
+          "ms": 154.04593699998804
+        },
+        {
+          "stage": "input:key",
+          "ms": 134.2405460000009
+        },
+        {
+          "stage": "observe",
+          "ms": 168.28909700000077
+        },
+        {
+          "stage": "input:text",
+          "ms": 134.09870400000364
+        },
+        {
+          "stage": "observe",
+          "ms": 162.93973800000094
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.180009000003338
+        },
+        {
+          "stage": "final-observe",
+          "ms": 155.23463099999935
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 10,
+      "status": "passed",
+      "elapsedMs": 1135.2107129999931,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 151.5021390000038
+        },
+        {
+          "stage": "sequence",
+          "ms": 193.35375900000508
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.528512999997474
+        },
+        {
+          "stage": "final-observe",
+          "ms": 165.77924899999925
+        },
+        {
+          "stage": "observe",
+          "ms": 167.48463900000206
+        },
+        {
+          "stage": "sequence",
+          "ms": 198.22034300000814
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.610209999998915
+        },
+        {
+          "stage": "final-observe",
+          "ms": 153.01391700000386
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 11,
+      "status": "passed",
+      "elapsedMs": 1140.5754149999993,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 153.18792799999937
+        },
+        {
+          "stage": "sequence",
+          "ms": 188.14961100000073
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.027513000008184
+        },
+        {
+          "stage": "final-observe",
+          "ms": 158.2045849999995
+        },
+        {
+          "stage": "observe",
+          "ms": 154.4647729999997
+        },
+        {
+          "stage": "sequence",
+          "ms": 196.76657700000214
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.61217999999644
+        },
+        {
+          "stage": "final-observe",
+          "ms": 154.24797099998978
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 11,
+      "status": "passed",
+      "elapsedMs": 2881.849623000002,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 163.49733399999968
+        },
+        {
+          "stage": "input:key",
+          "ms": 137.00699700000405
+        },
+        {
+          "stage": "observe",
+          "ms": 157.57245800000965
+        },
+        {
+          "stage": "input:text",
+          "ms": 130.98126899999625
+        },
+        {
+          "stage": "observe",
+          "ms": 163.28195200000482
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.041187000009813
+        },
+        {
+          "stage": "final-observe",
+          "ms": 157.14161299999978
+        },
+        {
+          "stage": "observe",
+          "ms": 147.62270599999465
+        },
+        {
+          "stage": "input:key",
+          "ms": 124.94904099999985
+        },
+        {
+          "stage": "observe",
+          "ms": 156.78582999999344
+        },
+        {
+          "stage": "input:text",
+          "ms": 132.07004099999904
+        },
+        {
+          "stage": "observe",
+          "ms": 163.45435400000133
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.181429000003845
+        },
+        {
+          "stage": "final-observe",
+          "ms": 159.80237299999862
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 11,
+      "status": "passed",
+      "elapsedMs": 3459.385321000009,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 189.7403190000041
+        },
+        {
+          "stage": "input:key",
+          "ms": 205.44963499999722
+        },
+        {
+          "stage": "observe",
+          "ms": 198.74055099999532
+        },
+        {
+          "stage": "input:text",
+          "ms": 517.461586999998
+        },
+        {
+          "stage": "observe",
+          "ms": 189.92019099999743
+        },
+        {
+          "stage": "input:key",
+          "ms": 198.71843999999692
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.6068030000024
+        },
+        {
+          "stage": "final-observe",
+          "ms": 198.16655400001036
+        },
+        {
+          "stage": "observe",
+          "ms": 193.71990399999777
+        },
+        {
+          "stage": "input:key",
+          "ms": 200.91794500000833
+        },
+        {
+          "stage": "observe",
+          "ms": 191.67626100000052
+        },
+        {
+          "stage": "input:text",
+          "ms": 518.3475670000043
+        },
+        {
+          "stage": "observe",
+          "ms": 189.86052099999506
+        },
+        {
+          "stage": "input:key",
+          "ms": 209.59768299999996
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.013326999993296
+        },
+        {
+          "stage": "final-observe",
+          "ms": 180.9302699999971
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 12,
+      "status": "passed",
+      "elapsedMs": 3436.820066,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 194.26386999999522
+        },
+        {
+          "stage": "input:key",
+          "ms": 202.76414600000135
+        },
+        {
+          "stage": "observe",
+          "ms": 187.63547600001039
+        },
+        {
+          "stage": "input:text",
+          "ms": 519.8181949999998
+        },
+        {
+          "stage": "observe",
+          "ms": 190.7787410000019
+        },
+        {
+          "stage": "input:key",
+          "ms": 203.8381379999919
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.86950600000273
+        },
+        {
+          "stage": "final-observe",
+          "ms": 185.9409069999965
+        },
+        {
+          "stage": "observe",
+          "ms": 187.38440300000366
+        },
+        {
+          "stage": "input:key",
+          "ms": 203.28569200000493
+        },
+        {
+          "stage": "observe",
+          "ms": 187.15306099998998
+        },
+        {
+          "stage": "input:text",
+          "ms": 509.9573640000017
+        },
+        {
+          "stage": "observe",
+          "ms": 198.89230300000054
+        },
+        {
+          "stage": "input:key",
+          "ms": 204.8367789999902
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.08337799999572
+        },
+        {
+          "stage": "final-observe",
+          "ms": 184.420769999997
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 12,
+      "status": "passed",
+      "elapsedMs": 2913.2044449999958,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 155.86880999999994
+        },
+        {
+          "stage": "input:key",
+          "ms": 137.2718210000021
+        },
+        {
+          "stage": "observe",
+          "ms": 164.5418570000038
+        },
+        {
+          "stage": "input:text",
+          "ms": 138.42785400000867
+        },
+        {
+          "stage": "observe",
+          "ms": 160.31908000000112
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.80925500000012
+        },
+        {
+          "stage": "final-observe",
+          "ms": 165.76821100000234
+        },
+        {
+          "stage": "observe",
+          "ms": 162.56578499999887
+        },
+        {
+          "stage": "input:key",
+          "ms": 146.9434789999941
+        },
+        {
+          "stage": "observe",
+          "ms": 163.73455900000408
+        },
+        {
+          "stage": "input:text",
+          "ms": 132.8021410000074
+        },
+        {
+          "stage": "observe",
+          "ms": 157.9852830000018
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.151367999991635
+        },
+        {
+          "stage": "final-observe",
+          "ms": 156.3951359999919
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 12,
+      "status": "passed",
+      "elapsedMs": 1130.5523640000029,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 158.621730999992
+        },
+        {
+          "stage": "sequence",
+          "ms": 179.60659700000542
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.60708899999736
+        },
+        {
+          "stage": "final-observe",
+          "ms": 155.79170000000158
+        },
+        {
+          "stage": "observe",
+          "ms": 151.64508300001035
+        },
+        {
+          "stage": "sequence",
+          "ms": 190.25528599999961
+        },
+        {
+          "stage": "page-ready",
+          "ms": 61.51968099997612
+        },
+        {
+          "stage": "final-observe",
+          "ms": 153.68411499998183
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 13,
+      "status": "passed",
+      "elapsedMs": 1128.8275760000106,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 156.80102099999203
+        },
+        {
+          "stage": "sequence",
+          "ms": 184.93494700000156
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.45717800001148
+        },
+        {
+          "stage": "final-observe",
+          "ms": 155.17163200001232
+        },
+        {
+          "stage": "observe",
+          "ms": 160.27257900001132
+        },
+        {
+          "stage": "sequence",
+          "ms": 178.76152800000273
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.01905400000396
+        },
+        {
+          "stage": "final-observe",
+          "ms": 153.67976600001566
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 13,
+      "status": "passed",
+      "elapsedMs": 3230.8490649999876,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 151.1003469999996
+        },
+        {
+          "stage": "input:key",
+          "ms": 129.74961699999403
+        },
+        {
+          "stage": "observe",
+          "ms": 157.86340299999574
+        },
+        {
+          "stage": "input:text",
+          "ms": 127.82443499998772
+        },
+        {
+          "stage": "observe",
+          "ms": 159.5338819999888
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.732703999994555
+        },
+        {
+          "stage": "final-observe",
+          "ms": 155.37364499998512
+        },
+        {
+          "stage": "observe",
+          "ms": 157.15425500000129
+        },
+        {
+          "stage": "input:key",
+          "ms": 131.00413100002334
+        },
+        {
+          "stage": "observe",
+          "ms": 160.1012589999882
+        },
+        {
+          "stage": "observe",
+          "ms": 153.31975200001034
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.22034800000256
+        },
+        {
+          "stage": "final-observe",
+          "ms": 164.150312999991
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 13,
+      "status": "passed",
+      "elapsedMs": 3452.3575399999972,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 176.9164569999848
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.08534699998563
+        },
+        {
+          "stage": "observe",
+          "ms": 200.31137000001036
+        },
+        {
+          "stage": "input:text",
+          "ms": 512.0409710000094
+        },
+        {
+          "stage": "observe",
+          "ms": 190.02551500001573
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.19730900001014
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.930145999998786
+        },
+        {
+          "stage": "final-observe",
+          "ms": 190.31652799999574
+        },
+        {
+          "stage": "observe",
+          "ms": 195.60270699998364
+        },
+        {
+          "stage": "input:key",
+          "ms": 198.24136700000963
+        },
+        {
+          "stage": "observe",
+          "ms": 200.35654000000795
+        },
+        {
+          "stage": "input:text",
+          "ms": 514.5792409999995
+        },
+        {
+          "stage": "observe",
+          "ms": 191.32301900000311
+        },
+        {
+          "stage": "input:key",
+          "ms": 198.44266900001094
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.86305600000196
+        },
+        {
+          "stage": "final-observe",
+          "ms": 192.01898699998856
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 14,
+      "status": "passed",
+      "elapsedMs": 3491.6294889999845,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 193.14241999998922
+        },
+        {
+          "stage": "input:key",
+          "ms": 203.16370200001984
+        },
+        {
+          "stage": "observe",
+          "ms": 190.6482519999845
+        },
+        {
+          "stage": "input:text",
+          "ms": 512.8742120000243
+        },
+        {
+          "stage": "observe",
+          "ms": 186.08625100000063
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.89957700000377
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.021956999989925
+        },
+        {
+          "stage": "final-observe",
+          "ms": 198.600242000015
+        },
+        {
+          "stage": "observe",
+          "ms": 197.96711500000674
+        },
+        {
+          "stage": "input:key",
+          "ms": 205.35726700001396
+        },
+        {
+          "stage": "observe",
+          "ms": 201.3174519999884
+        },
+        {
+          "stage": "input:text",
+          "ms": 523.9779670000135
+        },
+        {
+          "stage": "observe",
+          "ms": 192.33669100000407
+        },
+        {
+          "stage": "input:key",
+          "ms": 203.47286599999643
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.427939999994123
+        },
+        {
+          "stage": "final-observe",
+          "ms": 195.90244199999142
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 14,
+      "status": "passed",
+      "elapsedMs": 2870.5475480000023,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 156.90124400000786
+        },
+        {
+          "stage": "input:key",
+          "ms": 133.47683999998844
+        },
+        {
+          "stage": "observe",
+          "ms": 163.53063700001803
+        },
+        {
+          "stage": "input:text",
+          "ms": 135.12314899999183
+        },
+        {
+          "stage": "observe",
+          "ms": 163.15465300000506
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.04276700000628
+        },
+        {
+          "stage": "final-observe",
+          "ms": 160.81604700000025
+        },
+        {
+          "stage": "observe",
+          "ms": 159.02427699998952
+        },
+        {
+          "stage": "input:key",
+          "ms": 130.01872100000037
+        },
+        {
+          "stage": "observe",
+          "ms": 153.55336499999976
+        },
+        {
+          "stage": "input:text",
+          "ms": 128.37188299998525
+        },
+        {
+          "stage": "observe",
+          "ms": 152.01009799999883
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.958236999984365
+        },
+        {
+          "stage": "final-observe",
+          "ms": 155.99246300000232
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 14,
+      "status": "passed",
+      "elapsedMs": 1124.7743110000156,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 155.426627000008
+        },
+        {
+          "stage": "sequence",
+          "ms": 181.61158100000466
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.60988100001123
+        },
+        {
+          "stage": "final-observe",
+          "ms": 149.7806930000079
+        },
+        {
+          "stage": "observe",
+          "ms": 157.26198799998383
+        },
+        {
+          "stage": "sequence",
+          "ms": 189.34158800001023
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.34694700001273
+        },
+        {
+          "stage": "final-observe",
+          "ms": 155.48589700000593
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 15,
+      "status": "passed",
+      "elapsedMs": 1139.7542109999922,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 154.543577000004
+        },
+        {
+          "stage": "sequence",
+          "ms": 184.80702700000256
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.017894999997225
+        },
+        {
+          "stage": "final-observe",
+          "ms": 160.38027299998794
+        },
+        {
+          "stage": "observe",
+          "ms": 155.1438340000168
+        },
+        {
+          "stage": "sequence",
+          "ms": 186.7109589999891
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.6780120000185
+        },
+        {
+          "stage": "final-observe",
+          "ms": 160.6500749999832
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 15,
+      "status": "passed",
+      "elapsedMs": 2933.7574700000114,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 163.31298499999684
+        },
+        {
+          "stage": "input:key",
+          "ms": 134.0617369999818
+        },
+        {
+          "stage": "observe",
+          "ms": 168.86914799999795
+        },
+        {
+          "stage": "input:text",
+          "ms": 132.16361499999766
+        },
+        {
+          "stage": "observe",
+          "ms": 160.21806199999992
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.846194999990985
+        },
+        {
+          "stage": "final-observe",
+          "ms": 158.25594000000274
+        },
+        {
+          "stage": "observe",
+          "ms": 161.09848099999363
+        },
+        {
+          "stage": "input:key",
+          "ms": 140.3442470000009
+        },
+        {
+          "stage": "observe",
+          "ms": 165.25881699999445
+        },
+        {
+          "stage": "input:text",
+          "ms": 141.4221799999941
+        },
+        {
+          "stage": "observe",
+          "ms": 168.02295899999444
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.895507000008365
+        },
+        {
+          "stage": "final-observe",
+          "ms": 151.29042100001243
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 15,
+      "status": "passed",
+      "elapsedMs": 3462.291208999988,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 194.74663000000874
+        },
+        {
+          "stage": "input:key",
+          "ms": 197.54244100002688
+        },
+        {
+          "stage": "observe",
+          "ms": 189.11058599999524
+        },
+        {
+          "stage": "input:text",
+          "ms": 518.5166400000162
+        },
+        {
+          "stage": "observe",
+          "ms": 195.18819499999518
+        },
+        {
+          "stage": "input:key",
+          "ms": 200.69556599998032
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.895466999994824
+        },
+        {
+          "stage": "final-observe",
+          "ms": 190.92398600000888
+        },
+        {
+          "stage": "observe",
+          "ms": 189.2768480000086
+        },
+        {
+          "stage": "input:key",
+          "ms": 198.07901799998945
+        },
+        {
+          "stage": "observe",
+          "ms": 201.0627600000007
+        },
+        {
+          "stage": "input:text",
+          "ms": 517.5204099999974
+        },
+        {
+          "stage": "observe",
+          "ms": 182.61543299999903
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.20590100000845
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.604274000012083
+        },
+        {
+          "stage": "final-observe",
+          "ms": 195.215354999993
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 16,
+      "status": "passed",
+      "elapsedMs": 3579.6187560000108,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 187.68300999997882
+        },
+        {
+          "stage": "input:key",
+          "ms": 216.174920999998
+        },
+        {
+          "stage": "observe",
+          "ms": 214.7809760000091
+        },
+        {
+          "stage": "input:text",
+          "ms": 528.0301779999863
+        },
+        {
+          "stage": "observe",
+          "ms": 196.120974999998
+        },
+        {
+          "stage": "input:key",
+          "ms": 212.16225600001053
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.512014000007184
+        },
+        {
+          "stage": "final-observe",
+          "ms": 201.49550600000657
+        },
+        {
+          "stage": "observe",
+          "ms": 199.57954400000744
+        },
+        {
+          "stage": "input:key",
+          "ms": 215.70998600000166
+        },
+        {
+          "stage": "observe",
+          "ms": 212.13885599997593
+        },
+        {
+          "stage": "input:text",
+          "ms": 512.5931550000096
+        },
+        {
+          "stage": "observe",
+          "ms": 186.69612999999663
+        },
+        {
+          "stage": "input:key",
+          "ms": 214.55085299999337
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.29091999999946
+        },
+        {
+          "stage": "final-observe",
+          "ms": 203.67053099998157
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 16,
+      "status": "passed",
+      "elapsedMs": 3118.019292000012,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 162.77230099998997
+        },
+        {
+          "stage": "input:key",
+          "ms": 139.0861440000008
+        },
+        {
+          "stage": "observe",
+          "ms": 163.755232000025
+        },
+        {
+          "stage": "input:text",
+          "ms": 137.19492300000275
+        },
+        {
+          "stage": "observe",
+          "ms": 164.46105000001262
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.090968000004068
+        },
+        {
+          "stage": "final-observe",
+          "ms": 164.44762999998056
+        },
+        {
+          "stage": "observe",
+          "ms": 161.06816199998138
+        },
+        {
+          "stage": "input:key",
+          "ms": 148.67373199999565
+        },
+        {
+          "stage": "observe",
+          "ms": 176.02172999997856
+        },
+        {
+          "stage": "input:text",
+          "ms": 148.6206419999944
+        },
+        {
+          "stage": "observe",
+          "ms": 177.3027449999936
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.29981100000441
+        },
+        {
+          "stage": "final-observe",
+          "ms": 173.15844700002344
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 16,
+      "status": "passed",
+      "elapsedMs": 1200.9951210000145,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 161.53426700001
+        },
+        {
+          "stage": "sequence",
+          "ms": 191.35742300000857
+        },
+        {
+          "stage": "page-ready",
+          "ms": 61.66102400000091
+        },
+        {
+          "stage": "final-observe",
+          "ms": 163.25555600001826
+        },
+        {
+          "stage": "observe",
+          "ms": 170.48463799999445
+        },
+        {
+          "stage": "sequence",
+          "ms": 204.31323800000246
+        },
+        {
+          "stage": "page-ready",
+          "ms": 61.56421299997601
+        },
+        {
+          "stage": "final-observe",
+          "ms": 171.69948199999635
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 17,
+      "status": "passed",
+      "elapsedMs": 1237.6032039999845,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 168.1416709999903
+        },
+        {
+          "stage": "sequence",
+          "ms": 209.1964240000234
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.365649000013946
+        },
+        {
+          "stage": "final-observe",
+          "ms": 174.57880400001886
+        },
+        {
+          "stage": "observe",
+          "ms": 179.37298800001736
+        },
+        {
+          "stage": "sequence",
+          "ms": 203.62108099999023
+        },
+        {
+          "stage": "page-ready",
+          "ms": 60.35429899999872
+        },
+        {
+          "stage": "final-observe",
+          "ms": 163.77576299998327
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 17,
+      "status": "passed",
+      "elapsedMs": 2908.559187000006,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 160.6081670000276
+        },
+        {
+          "stage": "input:key",
+          "ms": 131.6693320000195
+        },
+        {
+          "stage": "observe",
+          "ms": 165.96788700000616
+        },
+        {
+          "stage": "input:text",
+          "ms": 140.0216059999948
+        },
+        {
+          "stage": "observe",
+          "ms": 158.75952600000892
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.816087000013795
+        },
+        {
+          "stage": "final-observe",
+          "ms": 157.96939699997893
+        },
+        {
+          "stage": "observe",
+          "ms": 148.9390350000176
+        },
+        {
+          "stage": "input:key",
+          "ms": 141.01878700000816
+        },
+        {
+          "stage": "observe",
+          "ms": 165.80218599998625
+        },
+        {
+          "stage": "input:text",
+          "ms": 138.88402299999143
+        },
+        {
+          "stage": "observe",
+          "ms": 162.22482499998296
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.884626000013668
+        },
+        {
+          "stage": "final-observe",
+          "ms": 158.47617299997364
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 17,
+      "status": "passed",
+      "elapsedMs": 3548.697118000011,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 204.95124599998235
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.4604859999963
+        },
+        {
+          "stage": "observe",
+          "ms": 203.09446600000956
+        },
+        {
+          "stage": "input:text",
+          "ms": 519.4479960000026
+        },
+        {
+          "stage": "observe",
+          "ms": 188.63965299999109
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.69808899998316
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.358271000004606
+        },
+        {
+          "stage": "final-observe",
+          "ms": 193.61866899998859
+        },
+        {
+          "stage": "observe",
+          "ms": 201.9662529999914
+        },
+        {
+          "stage": "input:key",
+          "ms": 207.20022199998493
+        },
+        {
+          "stage": "observe",
+          "ms": 199.7125079999969
+        },
+        {
+          "stage": "input:text",
+          "ms": 522.7334330000158
+        },
+        {
+          "stage": "observe",
+          "ms": 194.54016999999294
+        },
+        {
+          "stage": "input:key",
+          "ms": 221.6012139999948
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.06165799999144
+        },
+        {
+          "stage": "final-observe",
+          "ms": 197.58234399999492
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 18,
+      "status": "passed",
+      "elapsedMs": 3526.905159999995,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 199.32911300001433
+        },
+        {
+          "stage": "input:key",
+          "ms": 205.49966299999505
+        },
+        {
+          "stage": "observe",
+          "ms": 191.90444000001298
+        },
+        {
+          "stage": "input:text",
+          "ms": 527.3259250000119
+        },
+        {
+          "stage": "observe",
+          "ms": 188.5417820000148
+        },
+        {
+          "stage": "input:key",
+          "ms": 215.73274899998796
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.500381999998353
+        },
+        {
+          "stage": "final-observe",
+          "ms": 198.23268100002315
+        },
+        {
+          "stage": "observe",
+          "ms": 180.5152320000052
+        },
+        {
+          "stage": "input:key",
+          "ms": 202.95225499998196
+        },
+        {
+          "stage": "observe",
+          "ms": 208.800270000007
+        },
+        {
+          "stage": "input:text",
+          "ms": 518.9288919999963
+        },
+        {
+          "stage": "observe",
+          "ms": 196.67312399999355
+        },
+        {
+          "stage": "input:key",
+          "ms": 217.7218109999958
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.15906800000812
+        },
+        {
+          "stage": "final-observe",
+          "ms": 199.1404319999856
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 18,
+      "status": "passed",
+      "elapsedMs": 2972.896770000021,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 162.48405900000944
+        },
+        {
+          "stage": "input:key",
+          "ms": 132.378549999994
+        },
+        {
+          "stage": "observe",
+          "ms": 161.67338999998174
+        },
+        {
+          "stage": "input:text",
+          "ms": 147.6092709999939
+        },
+        {
+          "stage": "observe",
+          "ms": 168.51230800000485
+        },
+        {
+          "stage": "page-ready",
+          "ms": 29.993928000010783
+        },
+        {
+          "stage": "final-observe",
+          "ms": 161.47567799998797
+        },
+        {
+          "stage": "observe",
+          "ms": 157.53933400000096
+        },
+        {
+          "stage": "input:key",
+          "ms": 140.565013000014
+        },
+        {
+          "stage": "observe",
+          "ms": 161.68201000001864
+        },
+        {
+          "stage": "input:text",
+          "ms": 145.54914899999858
+        },
+        {
+          "stage": "observe",
+          "ms": 163.58496199999354
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.414331999985734
+        },
+        {
+          "stage": "final-observe",
+          "ms": 159.4306650000217
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 18,
+      "status": "passed",
+      "elapsedMs": 1139.060415999993,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 158.37696299998788
+        },
+        {
+          "stage": "sequence",
+          "ms": 185.44117799997912
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.334348000003956
+        },
+        {
+          "stage": "final-observe",
+          "ms": 157.16296000001603
+        },
+        {
+          "stage": "observe",
+          "ms": 162.95792499999516
+        },
+        {
+          "stage": "sequence",
+          "ms": 188.46111199998995
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.886733999999706
+        },
+        {
+          "stage": "final-observe",
+          "ms": 150.9336900000053
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-sequence",
+      "sample": 19,
+      "status": "passed",
+      "elapsedMs": 1133.0377290000033,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 152.14871399998083
+        },
+        {
+          "stage": "sequence",
+          "ms": 185.3886969999876
+        },
+        {
+          "stage": "page-ready",
+          "ms": 61.021426999999676
+        },
+        {
+          "stage": "final-observe",
+          "ms": 159.33665499999188
+        },
+        {
+          "stage": "observe",
+          "ms": 157.63305499998387
+        },
+        {
+          "stage": "sequence",
+          "ms": 182.2549219999928
+        },
+        {
+          "stage": "page-ready",
+          "ms": 59.76602300000377
+        },
+        {
+          "stage": "final-observe",
+          "ms": 158.79112800001167
+        }
+      ]
+    },
+    {
+      "competitor": "candidate-primitives",
+      "sample": 19,
+      "status": "passed",
+      "elapsedMs": 2882.6462140000076,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 157.68950600002427
+        },
+        {
+          "stage": "input:key",
+          "ms": 135.4755460000015
+        },
+        {
+          "stage": "observe",
+          "ms": 162.31039699999383
+        },
+        {
+          "stage": "input:text",
+          "ms": 134.5949949999922
+        },
+        {
+          "stage": "observe",
+          "ms": 168.6038379999809
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.01320799998939
+        },
+        {
+          "stage": "final-observe",
+          "ms": 162.3629779999901
+        },
+        {
+          "stage": "observe",
+          "ms": 164.50215300000855
+        },
+        {
+          "stage": "input:key",
+          "ms": 133.01554799999576
+        },
+        {
+          "stage": "observe",
+          "ms": 161.23398600000655
+        },
+        {
+          "stage": "input:text",
+          "ms": 132.53183300001547
+        },
+        {
+          "stage": "observe",
+          "ms": 157.2395710000128
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.775676000019303
+        },
+        {
+          "stage": "final-observe",
+          "ms": 147.78671400001622
+        }
+      ]
+    },
+    {
+      "competitor": "baseline",
+      "sample": 19,
+      "status": "passed",
+      "elapsedMs": 3478.057786999998,
+      "stages": [
+        {
+          "stage": "observe",
+          "ms": 191.56869799998822
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.82480199998827
+        },
+        {
+          "stage": "observe",
+          "ms": 196.29221099999268
+        },
+        {
+          "stage": "input:text",
+          "ms": 513.5079739999783
+        },
+        {
+          "stage": "observe",
+          "ms": 185.24342700000852
+        },
+        {
+          "stage": "input:key",
+          "ms": 201.96700499998406
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.1280390000029
+        },
+        {
+          "stage": "final-observe",
+          "ms": 188.80790700000944
+        },
+        {
+          "stage": "observe",
+          "ms": 194.5602620000136
+        },
+        {
+          "stage": "input:key",
+          "ms": 208.61697000000277
+        },
+        {
+          "stage": "observe",
+          "ms": 194.24013799999375
+        },
+        {
+          "stage": "input:text",
+          "ms": 520.0890590000199
+        },
+        {
+          "stage": "observe",
+          "ms": 190.82025900000008
+        },
+        {
+          "stage": "input:key",
+          "ms": 207.81111099998816
+        },
+        {
+          "stage": "page-ready",
+          "ms": 30.137549000006402
+        },
+        {
+          "stage": "final-observe",
+          "ms": 198.64816799998516
+        }
+      ]
+    }
+  ],
+  "summary": [
+    {
+      "competitor": "baseline",
+      "passed": 20,
+      "attempts": 20,
+      "meanMs": 3482.172805000001,
+      "medianMs": 3455.871430500003,
+      "p95Ms": 3704.6826720000026
+    },
+    {
+      "competitor": "candidate-primitives",
+      "passed": 20,
+      "attempts": 20,
+      "meanMs": 2946.644120400002,
+      "medianMs": 2921.2902335,
+      "p95Ms": 3118.019292000012
+    },
+    {
+      "competitor": "candidate-sequence",
+      "passed": 20,
+      "attempts": 20,
+      "meanMs": 1149.5856162500006,
+      "medianMs": 1140.1648129999958,
+      "p95Ms": 1211.3896779999995
+    }
+  ],
+  "comparisons": [
+    {
+      "competitor": "candidate-primitives",
+      "pairs": 20,
+      "estimate": 1.1817418944121767,
+      "lower95": 1.161478006931792,
+      "upper95": 1.2015466041517118
+    },
+    {
+      "competitor": "candidate-sequence",
+      "pairs": 20,
+      "estimate": 3.029067827378533,
+      "lower95": 2.9806055265599465,
+      "upper95": 3.0828026873715313
+    }
+  ]
+}

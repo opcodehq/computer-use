@@ -86,11 +86,24 @@ export function failure(
   return Object.assign(new Error(message), { code, delivery });
 }
 export function errorJSON(e: unknown) {
-  const error = e as Error & { code?: string; delivery?: string };
+  const error = e as Error & {
+    code?: string;
+    delivery?: string;
+    steps?: { index: number; delivery: string }[];
+    failedStep?: number;
+    failedStepDelivery?: string;
+  };
   return {
     code: error.code ?? "invalid_request",
     message: error.message ?? "Request failed",
     delivery: error.delivery ?? "notDispatched",
+    ...(error.steps
+      ? {
+          steps: error.steps,
+          failedStep: error.failedStep,
+          failedStepDelivery: error.failedStepDelivery,
+        }
+      : {}),
   };
 }
 export interface Observation {
@@ -161,6 +174,18 @@ export const methodArguments = {
     leaseId,
     observationId: z.string().min(1),
     action: Action,
+  }),
+  sequence: z.object({
+    leaseId,
+    observationId: z.string().min(1),
+    field: z.enum(["addressBar", "focused"]),
+    text: z
+      .string()
+      .min(1)
+      .max(8000)
+      .refine((s) => !s.includes("\0")),
+    submit: z.boolean().default(false),
+    finalObservation: z.boolean().default(false),
   }),
   resize: z.object({
     leaseId,

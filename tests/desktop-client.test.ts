@@ -124,3 +124,37 @@ test("credential named pipes are rejected without waiting for a writer", async (
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("partial sequence receipts survive the HTTP client and malformed details preserve delivery uncertainty", async () => {
+  for (const failedStep of [1, 999]) {
+    await assert.rejects(
+      desktopCall(
+        credential,
+        "sequence",
+        {},
+        {
+          fetch: async () =>
+            new Response(
+              JSON.stringify({
+                ok: false,
+                error: {
+                  code: "outcome_unknown",
+                  message: "Stopped",
+                  delivery: "unknown",
+                  steps: [{ index: 0, delivery: "dispatchedUnverified" }],
+                  failedStep,
+                  failedStepDelivery: "notDispatched",
+                },
+              }),
+              { status: 409 },
+            ),
+        },
+      ),
+      (error: any) => {
+        assert.equal(error.delivery, "unknown");
+        assert.equal(error.failedStep, failedStep === 1 ? 1 : undefined);
+        return true;
+      },
+    );
+  }
+});

@@ -127,7 +127,14 @@ export async function desktopCall(
     protocol?: number;
     generation?: string;
     result?: unknown;
-    error?: { code?: string; message?: string; delivery?: string };
+    error?: {
+      code?: string;
+      message?: string;
+      delivery?: string;
+      steps?: unknown;
+      failedStep?: unknown;
+      failedStepDelivery?: unknown;
+    };
   };
   try {
     result = (await response.json()) as typeof result;
@@ -144,13 +151,30 @@ export async function desktopCall(
       "Invalid desktop response.",
       reads.has(method) ? "notDispatched" : "unknown",
     );
-  if (!result.ok || !response.ok)
-    throw failure(
+  if (!result.ok || !response.ok) {
+    const error = failure(
       result.error?.code ?? "connection_failed",
       result.error?.message ?? "Desktop request failed.",
       result.error?.delivery ??
         (reads.has(method) ? "notDispatched" : "unknown"),
     );
+    const details = z
+      .object({
+        steps: z
+          .array(
+            z.object({
+              index: z.number().int().min(0).max(2),
+              delivery: z.literal("dispatchedUnverified"),
+            }),
+          )
+          .max(3),
+        failedStep: z.number().int().min(0).max(2),
+        failedStepDelivery: z.enum(["notDispatched", "unknown"]),
+      })
+      .safeParse(result.error);
+    if (details.success) Object.assign(error, details.data);
+    throw error;
+  }
   if (
     result.protocol !== 1 ||
     (result.generation !== credential.generation && method !== "rebind")

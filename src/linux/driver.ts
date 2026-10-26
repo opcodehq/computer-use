@@ -1,3 +1,4 @@
+import {ppmToPNG, parsePPM} from "./capture.js";
 import { LinuxAccessibility } from './accessibility.js';
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -71,15 +72,11 @@ async function windows(): Promise<WindowInfo[]> {
   isolated();
   return (JSON.parse((await command(["list"])).toString()) as WindowInfo[]).filter(w=>w.title!=='Opcode CU Preview');
 }
+const samples=new WeakMap<Buffer,Buffer>();
 async function capture(w: WindowInfo) {
   const raw = await command(["capture", String(w.id)]);
-  const match = /^P6\n(\d+) (\d+)\n255\n/.exec(raw.toString("ascii", 0, 80));
-  if (!match) throw error("Invalid capture.");
-  return sharp(raw.subarray(match[0].length), {
-    raw: { width: Number(match[1]), height: Number(match[2]), channels: 3 },
-  })
-    .png()
-    .toBuffer();
+  const png=ppmToPNG(raw), frame=parsePPM(raw);
+  samples.set(png,await sharp(frame.pixels,{raw:{width:frame.width,height:frame.height,channels:3}}).resize(96,64).removeAlpha().raw().toBuffer()); return png;
 }
 async function fresh(id: unknown) {
   if (!current || id !== current.snapshot.id || Date.now() - current.at > 30000)
@@ -375,16 +372,9 @@ async function executeLegacy(r: Record<string, any>) {
     if (!["isolated","background"].includes(delivery)) throw error("Unknown input delivery.");
     if (delivery === "background" && !["click","doubleClick","rightClick","hover","drag"].includes(kind)) throw error("Background keyboard and scroll require a semantic browser route.", "Unsupported");
     // Bind input to the image the agent inspected, allowing only small cursor/caret changes.
-    const before = await sharp(c.png)
-      .resize(96, 64)
-      .removeAlpha()
-      .raw()
-      .toBuffer();
-    const now = await sharp(await capture(c.window))
-      .resize(96, 64)
-      .removeAlpha()
-      .raw()
-      .toBuffer();
+    const before = samples.get(c.png) ?? await sharp(c.png).resize(96,64).removeAlpha().raw().toBuffer();
+    const rawFresh=parsePPM(await command(["capture",String(c.window.id)]));
+    const now=await sharp(rawFresh.pixels,{raw:{width:rawFresh.width,height:rawFresh.height,channels:3}}).resize(96,64).removeAlpha().raw().toBuffer();
     let difference = 0;
     for (let i = 0; i < before.length; i++)
       difference += Math.abs(before[i]! - now[i]!);

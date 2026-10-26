@@ -312,7 +312,10 @@ export async function startDesktop(input: z.input<typeof Config>) {
         inFlight++;
         counted = true;
         res.once("close", () => {
-          if (!res.writableEnded && request.method === "input")
+          if (
+            !res.writableEnded &&
+            ["input", "sequence"].includes(request.method)
+          )
             void controller.cancelGrantInput(grant.id).catch(() => {});
         });
         const result = await controller.call(request, grant, admin);

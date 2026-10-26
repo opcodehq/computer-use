@@ -19,7 +19,7 @@ function chunk(kind: string, data: Buffer) {
   result.writeUInt32BE(crc32(Buffer.concat([type, data])), 8 + data.length);
   return result;
 }
-export function ppmToPNG(raw: Buffer) {
+export function parsePPM(raw: Buffer) {
   const header = /^P6\n(\d+) (\d+)\n255\n/.exec(raw.toString("ascii", 0, 80));
   if (!header) throw new Error("Invalid native frame.");
   const width = Number(header[1]),
@@ -32,8 +32,24 @@ export function ppmToPNG(raw: Buffer) {
     raw.length - header[0].length !== width * height * 3
   )
     throw new Error("Invalid frame dimensions.");
-  const pixels = raw.subarray(header[0].length),
-    rows = Buffer.alloc(height * (width * 3 + 1));
+  return { width, height, pixels: raw.subarray(header[0].length) };
+}
+export function samplePPM(raw: Buffer, columns = 64, rows = 48) {
+  const { width, height, pixels } = parsePPM(raw),
+    sample = Buffer.alloc(columns * rows * 3);
+  for (let y = 0; y < rows; y++)
+    for (let x = 0; x < columns; x++) {
+      const offset =
+        (Math.floor((y * height) / rows) * width +
+          Math.floor((x * width) / columns)) *
+        3;
+      pixels.copy(sample, (y * columns + x) * 3, offset, offset + 3);
+    }
+  return sample;
+}
+export function ppmToPNG(raw: Buffer) {
+  const { width, height, pixels } = parsePPM(raw);
+  const rows = Buffer.alloc(height * (width * 3 + 1));
   for (let y = 0; y < height; y++)
     pixels.copy(
       rows,

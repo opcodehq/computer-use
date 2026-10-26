@@ -16,12 +16,17 @@ import { startDesktop } from "../src/desktop/server.js";
     await writeFile(
       helper,
       `#!/usr/bin/env node
-const op=process.argv[2];
-if(op==='display') console.log(JSON.stringify({id:1,x:0,y:0,width:2,height:2}));
-else if(op==='state') console.log(JSON.stringify({focus:1,x:0,y:0}));
-else if(op==='capture') process.stdout.write(Buffer.concat([Buffer.from('P6\\n2 2\\n255\\n'),Buffer.alloc(12)]));
-else if(op==='list') console.log('[]');
-else console.log('{}');
+function run(op){
+const geometry={id:1,x:0,y:0,width:2,height:2},meta=JSON.stringify({geometry,displayGeometry:geometry,focus:1,captureMs:0})+'\\n';
+if(op==='display')return Buffer.from(JSON.stringify(geometry));
+if(op==='state')return Buffer.from(JSON.stringify({focus:1,x:0,y:0}));
+if(op==='frame')return Buffer.concat([Buffer.from(meta),Buffer.from('P6\\n2 2\\n255\\n'),Buffer.alloc(12)]);
+if(op==='sample')return Buffer.concat([Buffer.from(meta),Buffer.alloc(64*48*3)]);
+if(op==='list')return Buffer.from('[]');return Buffer.alloc(0);
+}
+if(process.argv[2]!=='serve')process.stdout.write(run(process.argv[2]));
+else {let buffer=Buffer.alloc(0);process.stdin.on('data',data=>{buffer=Buffer.concat([buffer,data]);while(buffer.length>=4&&buffer.length>=4+buffer.readUInt32BE(0)){const size=buffer.readUInt32BE(0),id=buffer.readUInt32BE(4),length=buffer.readUInt32BE(12),op=buffer.subarray(16,16+length).toString();buffer=buffer.subarray(4+size);const result=run(op),header=Buffer.alloc(12);header.writeUInt32BE(id);header.writeUInt32BE(result.length,8);process.stdout.write(Buffer.concat([header,result]));}});}
+
 `,
     );
     await chmod(helper, 0o700);

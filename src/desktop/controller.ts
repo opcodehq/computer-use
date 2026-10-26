@@ -144,7 +144,8 @@ export class DesktopController {
     try {
       const value = await task;
       const geometryKey = JSON.stringify(
-        await this.backend.geometry({ kind: "display" }),
+        value.displayGeometry ??
+          (await this.backend.geometry({ kind: "display" })),
       );
       if (this.geometryKey && geometryKey !== this.geometryKey) {
         this.epoch++;
@@ -158,8 +159,13 @@ export class DesktopController {
     }
   }
   async observe(grant: Grant, target: Target): Promise<Observation> {
-    const { png, geometry, sample } = await this.capture(target);
-    const focus = (await this.backend.state()).focus;
+    const {
+      png,
+      geometry,
+      sample,
+      focus: capturedFocus,
+    } = await this.capture(target);
+    const focus = capturedFocus ?? (await this.backend.state()).focus;
     const value: Observation = {
       observationId: randomUUID(),
       runtimeGeneration: this.generation,
@@ -296,6 +302,7 @@ export class DesktopController {
     const lease = this.requireLease(grant, args.leaseId);
     const admitted = lease.epoch;
     let action = Action.parse(args.action);
+    const sequence = args.sequenceActions as Action[] | undefined;
     const observationId = z.string().parse(args.observationId);
     if (this.queued >= 16) throw failure("overloaded", "Input queue is full.");
     this.queued++;
@@ -323,11 +330,27 @@ export class DesktopController {
             "stale_observation",
             "Observe again with the current grant and lease.",
           );
-        const geometry = await this.backend.geometry(record.value.target);
+        const validation = this.backend.validate
+          ? await this.backend.validate(record.value.target)
+          : undefined;
+        const geometry =
+          validation?.geometry ??
+          (await this.backend.geometry(record.value.target));
         if (JSON.stringify(geometry) !== JSON.stringify(record.geometry))
           throw failure("stale_observation", "Target geometry changed.");
         this.frame = undefined;
-        const fresh = await this.capture(record.value.target);
+        const fresh = validation ?? (await this.capture(record.value.target));
+        if (
+          validation &&
+          JSON.stringify(validation.displayGeometry) !== this.geometryKey
+        ) {
+          this.epoch++;
+          this.observations.clear();
+          throw failure(
+            "stale_observation",
+            "Display geometry changed. Observe again.",
+          );
+        }
         let difference = 0;
         for (let i = 0; i < record.sample.length; i++)
           difference += Math.abs(record.sample[i]! - fresh.sample[i]!);
@@ -336,7 +359,10 @@ export class DesktopController {
             "stale_observation",
             "Screen changed substantially. Observe again.",
           );
-        if ((await this.backend.state()).focus !== record.focus)
+        if (
+          (validation?.focus ?? (await this.backend.state()).focus) !==
+          record.focus
+        )
           throw failure(
             "stale_observation",
             "Keyboard focus changed. Observe again.",
@@ -357,7 +383,9 @@ export class DesktopController {
                 "Coordinates must be inside the delivered image.",
               );
         }
-        action = await this.backend.prepareAction(action);
+        const actions = await Promise.all(
+          (sequence ?? [action]).map((a) => this.backend.prepareAction(a)),
+        );
         // Recheck after asynchronous preparation: takeover may have fenced this call.
         this.requireLease(grant, args.leaseId);
         if (admitted !== this.epoch)
@@ -374,55 +402,125 @@ export class DesktopController {
           () => abort.abort(),
           Math.max(1, Math.min(10000, currentLease.expiresAt - Date.now())),
         );
-        const previouslyHeldKeys = new Set(this.heldKeys);
-        const previouslyHeldButtons = new Set(this.heldButtons);
-        if (action.kind === "keyDown") this.heldKeys.add(action.key);
-        if (action.kind === "buttonDown") this.heldButtons.add(action.button);
-        const transientButtons = ["click", "doubleClick", "drag"].includes(
-          action.kind,
-        )
-          ? [1]
-          : action.kind === "rightClick"
-            ? [3]
-            : [];
-        const transientKeys =
-          action.kind === "key"
-            ? action.key.split("+")
-            : action.kind === "text"
-              ? (action.pasteKey ?? "Control+v").split("+")
-              : [];
-        for (const button of transientButtons) this.heldButtons.add(button);
-        for (const key of transientKeys) this.heldKeys.add(key);
-        let failed = false;
+        const steps: { index: number; delivery: string }[] = [];
+        let sequenceFocusWindow: number | undefined;
         try {
-          await this.persistHeld();
-          await this.backend.input(record.value.target, action, abort.signal);
-          for (const button of transientButtons)
-            if (!previouslyHeldButtons.has(button))
-              this.heldButtons.delete(button);
-          for (const key of transientKeys)
-            if (!previouslyHeldKeys.has(key)) this.heldKeys.delete(key);
-          if (action.kind === "keyUp") this.heldKeys.delete(action.key);
-          if (action.kind === "buttonUp")
-            this.heldButtons.delete(action.button);
-          await this.persistHeld();
+          if (sequence) {
+            const state = await this.backend.state();
+            if (state.focus !== record.focus)
+              throw failure(
+                "stale_observation",
+                "Focus changed before text entry.",
+              );
+            sequenceFocusWindow =
+              record.value.target.kind === "window"
+                ? record.value.target.id
+                : (state.focusWindow ?? state.focus);
+          }
+          for (const [index, step] of actions.entries()) {
+            this.requireLease(grant, args.leaseId);
+            if (admitted !== this.epoch)
+              throw failure("lease_revoked", "Sequence control changed.");
+            abort.signal.throwIfAborted();
+            if (sequence && index > 0) {
+              // Chromium/Firefox handle address-field focus asynchronously. This
+              // bounded dispatch cadence is not an application-ready assertion.
+              if (index === 1)
+                await new Promise((resolve) => setTimeout(resolve, 50));
+              abort.signal.throwIfAborted();
+              const state = await this.backend.state();
+              if ((state.focusWindow ?? state.focus) !== sequenceFocusWindow)
+                throw failure(
+                  "stale_observation",
+                  "Focus left the authorized window during text entry.",
+                );
+              const nextGeometry = await this.backend.geometry(
+                record.value.target,
+              );
+              if (
+                ["id", "x", "y", "width", "height"].some(
+                  (k) =>
+                    nextGeometry[k as keyof Geometry] !==
+                    record.geometry[k as keyof Geometry],
+                )
+              )
+                throw failure(
+                  "stale_observation",
+                  "Geometry changed during text entry.",
+                );
+              this.requireLease(grant, args.leaseId);
+              abort.signal.throwIfAborted();
+            }
+            action = step;
+            const previouslyHeldKeys = new Set(this.heldKeys);
+            const previouslyHeldButtons = new Set(this.heldButtons);
+            if (action.kind === "keyDown") this.heldKeys.add(action.key);
+            if (action.kind === "buttonDown")
+              this.heldButtons.add(action.button);
+            const transientButtons = ["click", "doubleClick", "drag"].includes(
+              action.kind,
+            )
+              ? [1]
+              : action.kind === "rightClick"
+                ? [3]
+                : [];
+            const transientKeys =
+              action.kind === "key"
+                ? action.key.split("+")
+                : action.kind === "text"
+                  ? (action.pasteKey ?? "Control+v").split("+")
+                  : [];
+            for (const button of transientButtons) this.heldButtons.add(button);
+            for (const key of transientKeys) this.heldKeys.add(key);
+            try {
+              await this.persistHeld();
+              await this.backend.input(
+                record.value.target,
+                action,
+                abort.signal,
+              );
+              for (const button of transientButtons)
+                if (!previouslyHeldButtons.has(button))
+                  this.heldButtons.delete(button);
+              for (const key of transientKeys)
+                if (!previouslyHeldKeys.has(key)) this.heldKeys.delete(key);
+              if (action.kind === "keyUp") this.heldKeys.delete(action.key);
+              if (action.kind === "buttonUp")
+                this.heldButtons.delete(action.button);
+              await this.persistHeld();
+              steps.push({ index, delivery: "dispatchedUnverified" });
+            } catch {
+              throw failure(
+                "outcome_unknown",
+                "Input may have been delivered. Observe before deciding what to do; do not replay automatically.",
+                "unknown",
+              );
+            } finally {
+              this.frame = undefined;
+            }
+          }
           return {
             delivery: "dispatchedUnverified",
+            steps: sequence ? steps : undefined,
             next: "Observe to verify application outcome.",
           };
-        } catch {
-          failed = true;
-          throw failure(
-            "outcome_unknown",
-            "Input may have been delivered. Observe before deciding what to do; do not replay automatically.",
-            "unknown",
-          );
+        } catch (error) {
+          if (sequence)
+            Object.assign(error as Error, {
+              steps,
+              failedStep: steps.length,
+              failedStepDelivery:
+                (error as { delivery?: string }).delivery ?? "unknown",
+              ...(steps.length ? { delivery: "unknown" } : {}),
+            });
+          throw error;
         } finally {
           clearTimeout(deadline);
           finish();
           this.active = undefined;
           this.frame = undefined;
-          if (failed) await this.fence().catch(() => {});
+          if (abort.signal.aborted || steps.length !== actions.length)
+            await this.fence().catch(() => {});
         }
       })
       .finally(() => this.queued--);
@@ -451,6 +549,7 @@ export class DesktopController {
       release: "input-control",
       takeover: "input-control",
       input: "input-control",
+      sequence: "input-control",
       resize: "input-control",
       stop: "input-control",
       "recording.start": "recording-start",
@@ -618,6 +717,41 @@ export class DesktopController {
       case "stop":
         await this.fence();
         return { stopped: true };
+      case "sequence": {
+        if (this.backend.env.DISPLAY === "macos")
+          throw failure(
+            "unsupported",
+            "Text-entry sequences currently require Linux X11.",
+          );
+        const sequenceActions: Action[] = [
+          {
+            kind: "key",
+            key: a.field === "addressBar" ? "Control+l" : "Control+a",
+          },
+          { kind: "text", text: a.text as string, pasteKey: "Control+v" },
+          ...(a.submit ? [{ kind: "key" as const, key: "Enter" }] : []),
+        ];
+        const target = this.observations.get(a.observationId as string)?.value
+          .target;
+        const result = await this.action(g, {
+          ...a,
+          action: sequenceActions[0],
+          sequenceActions,
+        });
+        if (!a.finalObservation) return result;
+        try {
+          return {
+            ...result,
+            observation: await this.observe(g, target ?? { kind: "display" }),
+          };
+        } catch {
+          return {
+            ...result,
+            observationError:
+              "Final capture failed; observe again before continuing.",
+          };
+        }
+      }
       case "input":
         return this.action(g, a);
       case "resize": {
@@ -743,5 +877,6 @@ export class DesktopController {
     clearInterval(this.timer);
     this.presence.clear();
     await Promise.allSettled([this.fence(), this.recorder.fence()]);
+    this.backend.close?.();
   }
 }

@@ -15,6 +15,10 @@ import {
 } from "../src/desktop/protocol.js";
 
 class Fixture extends X11Backend {
+  override async validate() {
+    const frame = await this.capture();
+    return { ...frame, focus: 1, displayGeometry: frame.geometry };
+  }
   delivered: Action[] = [];
   block = false;
   color = 0;
@@ -384,6 +388,134 @@ test("transient shortcuts and clicks preserve preexisting held input until expli
       2,
     );
     assert.deepEqual(await held(), { keys: [], buttons: [] });
+  } finally {
+    await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("bounded text sequence reports steps, consumes observation and does not permit arbitrary actions", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "cu-sequence-")),
+    backend = new Fixture("", {}),
+    c = new DesktopController(backend, "one", directory);
+  await c.init();
+  try {
+    const grant = c.authority.issue("agent", [...scopes], 60000),
+      lease = (await c.call(request("acquire"), grant)) as { id: string };
+    const obs = await c.observe(grant, { kind: "display" });
+    const result = (await c.call(
+      request("sequence", {
+        leaseId: lease.id,
+        observationId: obs.observationId,
+        field: "addressBar",
+        text: "https://example.test",
+        submit: true,
+      }),
+      grant,
+    )) as { steps: unknown[] };
+    assert.equal(result.steps.length, 3);
+    assert.deepEqual(
+      backend.delivered.map((a) => a.kind),
+      ["key", "text", "key"],
+    );
+    await assert.rejects(
+      c.call(
+        request("input", {
+          leaseId: lease.id,
+          observationId: obs.observationId,
+          action: { kind: "key", key: "Enter" },
+        }),
+        grant,
+      ),
+      /Observe/,
+    );
+    await assert.rejects(
+      c.call(
+        request("sequence", {
+          leaseId: lease.id,
+          observationId: "unused",
+          field: "click",
+          text: "x",
+        }),
+        grant,
+      ),
+    );
+  } finally {
+    await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("sequence stops on changed focus and exposes partial delivery without replay", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "cu-sequence-")),
+    backend = new Fixture("", {}),
+    c = new DesktopController(backend, "one", directory);
+  await c.init();
+  try {
+    const grant = c.authority.issue("agent", [...scopes], 60000),
+      lease = (await c.call(request("acquire"), grant)) as { id: string };
+    const obs = await c.observe(grant, { kind: "display" });
+    let focusReads = 0;
+    backend.state = async () => ({
+      focus: focusReads++ === 0 ? 1 : 999,
+      x: 0,
+      y: 0,
+    });
+    await assert.rejects(
+      c.call(
+        request("sequence", {
+          leaseId: lease.id,
+          observationId: obs.observationId,
+          field: "addressBar",
+          text: "do not paste",
+          submit: true,
+        }),
+        grant,
+      ),
+      (e: any) => {
+        assert.equal(e.delivery, "unknown");
+        assert.equal(e.failedStep, 1);
+        assert.equal(e.steps.length, 1);
+        return true;
+      },
+    );
+    assert.deepEqual(
+      backend.delivered.map((a) => a.kind),
+      ["key"],
+    );
+  } finally {
+    await c.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("sequence accepts focus changes within the same authorized top-level window", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "cu-sequence-")),
+    backend = new Fixture("", {}),
+    c = new DesktopController(backend, "one", directory);
+  await c.init();
+  try {
+    const grant = c.authority.issue("agent", [...scopes], 60000),
+      lease = (await c.call(request("acquire"), grant)) as { id: string };
+    const obs = await c.observe(grant, { kind: "display" });
+    let reads = 0;
+    backend.state = async () => ({
+      focus: reads++ === 0 ? 1 : 2,
+      focusWindow: 1,
+      x: 0,
+      y: 0,
+    });
+    const result = (await c.call(
+      request("sequence", {
+        leaseId: lease.id,
+        observationId: obs.observationId,
+        field: "addressBar",
+        text: "https://example.test",
+        submit: true,
+      }),
+      grant,
+    )) as { steps: unknown[] };
+    assert.equal(result.steps.length, 3);
   } finally {
     await c.close();
     await rm(directory, { recursive: true, force: true });

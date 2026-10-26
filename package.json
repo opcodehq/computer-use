@@ -28,7 +28,9 @@
     "test:npm": "bun scripts/test-npm-package.mjs",
     "benchmark": "bun scripts/benchmark.mjs",
     "benchmark:browser": "node scripts/benchmark-browser.mjs",
-    "test:native-workflow": "dbus-run-session -- bun scripts/test-native-workflow.mjs"
+    "test:native-workflow": "dbus-run-session -- bun scripts/test-native-workflow.mjs",
+    "benchmark:firefox": "node scripts/benchmark-firefox.mjs",
+    "test:x11-runtime": "bun scripts/test-x11-runtime.mjs"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-beta.98",

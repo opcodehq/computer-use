@@ -241,3 +241,7 @@ provider-console input out of band or disable it while Opcode owns input.
 These are integration recipes, not certifications. No live Boat, boxd or E2B
 workspace has been tested in this change. Do not claim same-display compatibility
 until the cross-app/recording/takeover suite passes on each authorized image.
+
+The Linux broker also supports fixed, bounded text-entry `sequence` calls. See
+[native Linux performance and sequence semantics](LINUX_PERFORMANCE.md) for
+partial-delivery receipts, restart requirements and Firefox measurements.

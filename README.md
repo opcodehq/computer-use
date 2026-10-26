@@ -215,7 +215,7 @@ uses bounded PNG polling rather than video streaming.
 ## Linux cloud desktops
 
 Attach to an existing provider X11 desktop with raw screenshots, shared control ownership, authenticated viewing and headless recording. No detector or model API key is required. Start with the [Zuse integration guide](docs/ZUSE_INTEGRATION.md), then the [shared desktop service contract](docs/DESKTOP_SERVICE.md). Creating a separate Xvfb desktop remains available for local isolation.
-See [Linux cloud setup and the real desktop smoke test](docs/LINUX_CLOUD.md).
+See [Linux cloud setup and the real desktop smoke test](docs/LINUX_CLOUD.md), plus [native Linux capture optimizations and the Firefox benchmark](docs/LINUX_PERFORMANCE.md).
 
 ## Pointer, browser and viewer tools
 

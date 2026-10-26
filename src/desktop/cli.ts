@@ -345,6 +345,7 @@ serve owns only the broker; exit never destroys an attached display.`);
       "release",
       "takeover",
       "input",
+      "sequence",
       "resize",
       "stop",
       "recording.start",
@@ -452,8 +453,14 @@ serve owns only the broker; exit never destroys an attached display.`);
         if (method === "acquire" || method === "takeover")
           ownedLease = (result as { id: string }).id;
         if (method === "release" || method === "stop") ownedLease = undefined;
-        if (method === "observe") {
-          const observed = result as {
+        const captured =
+          method === "observe"
+            ? result
+            : method === "sequence"
+              ? (result as { observation?: unknown }).observation
+              : undefined;
+        if (captured) {
+          const observed = captured as {
             observationId: string;
             target: unknown;
             image: { width: number; height: number };
@@ -464,7 +471,7 @@ serve owns only the broker; exit never destroys an attached display.`);
           });
           if (observations.size > 32)
             observations.delete(observations.keys().next().value!);
-          const r = result as {
+          const r = captured as {
             image: { base64: string; mimeType: string };
             [key: string]: unknown;
           };
@@ -472,10 +479,17 @@ serve owns only the broker; exit never destroys an attached display.`);
             content: [
               {
                 type: "text",
-                text: JSON.stringify({
-                  ...r,
-                  image: { ...r.image, base64: undefined },
-                }),
+                text: JSON.stringify(
+                  method === "observe"
+                    ? { ...r, image: { ...r.image, base64: undefined } }
+                    : {
+                        ...(result as object),
+                        observation: {
+                          ...r,
+                          image: { ...r.image, base64: undefined },
+                        },
+                      },
+                ),
               },
               {
                 type: "image",

@@ -3,7 +3,8 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { ppmToPNG } from "../linux/capture.js";
+import { X11Session } from "../linux/x11-session.js";
+import { samplePPM, ppmToPNG } from "../linux/capture.js";
 import { type Action, failure, type Target } from "./protocol.js";
 
 const exec = promisify(execFile);
@@ -26,21 +27,52 @@ export interface DesktopBackend {
   geometry(target: Target): Promise<Geometry>;
   windows(): Promise<Geometry[]>;
   apps(): Promise<{ id: string; name: string; path?: string }[]>;
-  state(): Promise<{ focus: number; appClass?: string; x: number; y: number }>;
-  capture(
-    target: Target,
-  ): Promise<{ geometry: Geometry; png: Buffer; ppm: Buffer; sample: Buffer }>;
+  state(): Promise<{
+    focus: number;
+    focusWindow?: number;
+    appClass?: string;
+    x: number;
+    y: number;
+  }>;
+  capture(target: Target): Promise<{
+    geometry: Geometry;
+    png: Buffer;
+    ppm: Buffer;
+    sample: Buffer;
+    focus?: number;
+    displayGeometry?: Geometry;
+    timings?: { captureMs: number; encodeAndSampleMs: number };
+  }>;
+  validate?(target: Target): Promise<{
+    geometry: Geometry;
+    sample: Buffer;
+    focus: number;
+    displayGeometry: Geometry;
+  }>;
+  close?(): void;
   prepareAction(action: Action): Promise<Action>;
   input(target: Target, action: Action, signal: AbortSignal): Promise<void>;
   resize(width: number, height: number): Promise<Geometry>;
 }
 export class X11Backend implements DesktopBackend {
+  private session?: X11Session;
+  close() {
+    this.session?.close();
+  }
+  get timings() {
+    return this.session?.timings ?? [];
+  }
   constructor(
     readonly helper: string,
     readonly env: NodeJS.ProcessEnv,
   ) {}
   async run(args: string[], signal?: AbortSignal): Promise<Buffer> {
     signal?.throwIfAborted();
+    if (this.env.CU_X11_TRANSPORT !== "oneshot")
+      return (this.session ??= new X11Session(this.helper, this.env)).request(
+        args,
+        signal,
+      );
     return new Promise<Buffer>((resolve, reject) => {
       let result: Buffer | undefined;
       let failed = false;
@@ -104,16 +136,25 @@ export class X11Backend implements DesktopBackend {
       string,
       { id: string; name: string; path: string }
     >();
-    for (const directory of [
-      "/usr/share/applications",
-      join(homedir(), ".local/share/applications"),
-    ])
+    const dataRoots = [
+      this.env.XDG_DATA_HOME ?? join(homedir(), ".local/share"),
+      ...(this.env.XDG_DATA_DIRS ?? "/usr/local/share:/usr/share")
+        .split(":")
+        .filter(Boolean),
+      "/var/lib/snapd/desktop",
+    ];
+    for (const directory of [...new Set(dataRoots)]
+      .reverse()
+      .map((root) => join(root, "applications")))
       for (const id of await readdir(directory).catch(() => [])) {
         if (!/^[a-zA-Z0-9_.-]+\.desktop$/.test(id)) continue;
         const path = join(directory, id),
           text = await readFile(path, "utf8").catch(() => "");
-        if (/^Hidden=true$/m.test(text) || !/^Type=Application$/m.test(text))
+        if (/^Hidden=true$/m.test(text)) {
+          entries.delete(id);
           continue;
+        }
+        if (!/^Type=Application$/m.test(text)) continue;
         entries.set(id, {
           id,
           name: /^Name=(.+)$/m.exec(text)?.[1] ?? id,
@@ -125,32 +166,53 @@ export class X11Backend implements DesktopBackend {
   async state() {
     return JSON.parse((await this.run(["state"])).toString()) as {
       focus: number;
+      focusWindow?: number;
       appClass?: string;
       x: number;
       y: number;
     };
   }
-  async capture(target: Target) {
-    const geometry = await this.geometry(target);
-    const ppm = await this.run([
-      "capture",
+  private async frame(target: Target, sampleOnly: boolean) {
+    const raw = await this.run([
+      sampleOnly ? "sample" : "frame",
       target.kind === "display" ? "root" : String(target.id),
     ]);
-    const match = /^P6\n(\d+) (\d+)\n255\n/.exec(ppm.toString("ascii", 0, 80));
-    if (!match || +match[1] !== geometry.width || +match[2] !== geometry.height)
-      throw failure("stale_observation", "Display resized during capture.");
-    const offset = match[0].length,
-      sample = Buffer.alloc(64 * 48 * 3);
-    for (let y = 0; y < 48; y++)
-      for (let x = 0; x < 64; x++) {
-        const p =
-          offset +
-          (Math.floor((y * geometry.height) / 48) * geometry.width +
-            Math.floor((x * geometry.width) / 64)) *
-            3;
-        ppm.copy(sample, (y * 64 + x) * 3, p, p + 3);
-      }
-    return { geometry, ppm, png: ppmToPNG(ppm), sample };
+    const line = raw.indexOf(10);
+    if (line < 0 || line > 4096)
+      throw failure("invalid_frame", "Invalid native capture metadata.");
+    const metadata = JSON.parse(raw.subarray(0, line).toString());
+    const payload = raw.subarray(line + 1);
+    if (sampleOnly && payload.length !== 64 * 48 * 3)
+      throw failure("invalid_frame", "Invalid native sample.");
+    return { ...metadata, payload } as {
+      geometry: Geometry;
+      displayGeometry: Geometry;
+      focus: number;
+      captureMs: number;
+      payload: Buffer;
+    };
+  }
+  async validate(
+    target: Target,
+  ): ReturnType<NonNullable<DesktopBackend["validate"]>> {
+    const frame = await this.frame(target, true);
+    return { ...frame, sample: frame.payload };
+  }
+  async capture(target: Target): ReturnType<DesktopBackend["capture"]> {
+    const frame = await this.frame(target, false),
+      started = performance.now();
+    const sample = samplePPM(frame.payload),
+      png = ppmToPNG(frame.payload);
+    return {
+      ...frame,
+      ppm: frame.payload,
+      sample,
+      png,
+      timings: {
+        captureMs: frame.captureMs,
+        encodeAndSampleMs: performance.now() - started,
+      },
+    };
   }
   async prepareAction(action: Action): Promise<Action> {
     if (action.kind !== "text" || action.pasteKey) return action;
