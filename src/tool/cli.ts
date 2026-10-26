@@ -1,3 +1,5 @@
+import { workflowService, WorkflowRequest } from '../workflow/service.js';
+import { z } from 'zod';
 import { inspectSurface } from './inspect.js';
 import { BrowserTools, browserOperations } from '../browser/tools.js';
 import { DesktopViewer } from '../viewer/server.js';
@@ -71,6 +73,7 @@ Your agent plans and calls these tools using its existing login. No CU model key
   key --session NAME --app APP --snapshot-id ID --ref REF --key Enter
                                 Exact native actions; your agent chooses fresh targets
 
+  workflow --session NAME --input-json JSON  Register, validate, find or run a workflow
   browser --session NAME --input-json '{"operation":"open"}'
                                 Session-owned tabs, frames, dialogs and file transfers
   preview --session NAME        Show the Mac session preview
@@ -178,7 +181,7 @@ if (command === 'task') {
   const runtime = ManagedRuntime.make(driverLayer(process.env.JEV_DRIVER_PATH ?? resourcePaths(entry).driver));
   const abort = new AbortController();
   for (const name of ['SIGINT', 'SIGTERM'] as const) process.once(name, () => abort.abort());
-  const preview = process.platform === 'darwin' && !input['no-preview']
+  const preview = ['darwin','linux'].includes(process.platform) && !input['no-preview']
     ? await openTaskPreview(resourcePaths(entry).preview, () => abort.abort(), message => console.error(JSON.stringify({ warning: message }))) : undefined;
   preview?.send({ state: 'starting', message: `Working in ${input.app}. Captured frames appear in the preview. Ctrl-C cancels the task.` });
   try {
@@ -224,8 +227,18 @@ let browserView = false;
 let viewer: DesktopViewer | undefined;
 const browser = new BrowserTools({ headless: process.platform === 'darwin', ...(process.env.CU_BROWSER_NO_SANDBOX === '1' ? { args: ['--no-sandbox'] } : {}) });
 browser.activity=(message,pointer)=>viewer?.activity(message,pointer);
-const { tool: nativeTool, close: closeNative } = createDesktopTool(binary, event => { if(event.snapshot) target=event.snapshot; tool.event(event); });
+const { tool: nativeTool, close: closeNative } = createDesktopTool(binary, event => { if(event.snapshot) target=event.snapshot; tool.event(event); }, (method,run) => process.platform==='linux'&&['snapshot','screenshot','detect','execute','linuxInput'].includes(method)?tool.captureFrame(run):run());
+async function nativeWithPreview(method:string,args:Record<string,unknown>,signal?:AbortSignal):Promise<unknown> {
+  const result = await nativeTool.call(method,args,signal);
+  if(!tool.hasPreview || !result || typeof result !== 'object') return result;
+  const data=result as { snapshot?:Snapshot; id?:string; windowId?:number };
+  const snapshot=data.snapshot ?? (data.id ? result as Snapshot : undefined);
+  if(!snapshot?.windowId) return result;
+  try { const frame=await nativeTool.previewFrame(signal);if(!frame||frame.snapshot.id!==snapshot.id)return result;tool.event({state:'waiting',message:'Native workflow observation',snapshot,image:frame.image});return {...result,image:{base64:frame.image}}; } catch {return result;}
+}
+const workflows = workflowService((m,a,s) => nativeWithPreview(m,a,s), async (_m,a,s) => { const result = await browser.call(a,s); if (tool.hasPreview) { try { const image = await browser.capture(); tool.event({state:'acting', message:'Workflow browser observation',image:image.toString('base64')}); } catch {} } return result; }, (state,message) => tool.event({state,message}));
 const tool: DriverSession = new DriverSession(async(method,args,signal): Promise<unknown>=>{
+  if(method==='workflow') { const payload=typeof args['input-json']==='string'?JSON.parse(args['input-json']):Object.fromEntries(Object.entries(args).filter(([key,value])=>value!==undefined&&!['session','no-preview'].includes(key))); return workflows(payload,signal); }
   if(method==='inspect') { browserView=Boolean(args.pageId)||args.route==='browser'; return inspectSurface((m,a,s)=>nativeTool.call(m,a,s),(_m,a,s)=>browser.call(a,s),args,signal); }
   if(method==='browser') {
     browserView=true;
@@ -244,7 +257,7 @@ const tool: DriverSession = new DriverSession(async(method,args,signal): Promise
     viewer ??= new DesktopViewer({
       status:()=>browserView ? browser.status() : {},
       binding:()=>browserView ? 'browser:'+browser.status().pageId : 'native:'+target?.pid+':'+target?.windowId,
-      capture: async()=> {if(browserView)return browser.capture();if(process.platform!=='linux'||!target?.windowId)throw new Error('Observe a Linux window or open a session browser first.');return captureWindow(join(dirname(binary),'cu-x11'),target.windowId);},
+      capture: async()=> {if(browserView)return browser.capture();if(process.platform!=='linux'||!target?.windowId)throw new Error('Observe a Linux window or open a session browser first.');return tool.captureFrame(()=>captureWindow(join(dirname(binary),'cu-x11'),target!.windowId!));},
       pause:()=>tool.stop(), resume:()=>tool.call('resume',{}),
       input:action=>tool.manual(async()=>{
         if(browserView)return browser.humanInput(action);
@@ -259,9 +272,9 @@ const tool: DriverSession = new DriverSession(async(method,args,signal): Promise
     return info;
   }
   if(!['pause','resume','status'].includes(method))browserView=false;
-  return nativeTool.call(method,args,signal);
+  return nativeWithPreview(method,args,signal);
 }, async stop =>
-  process.platform === 'darwin' && !values['no-preview']
+  ['darwin','linux'].includes(process.platform) && !values['no-preview']
     ? openTaskPreview(resourcePaths(entry).preview, stop, message => console.error(JSON.stringify({ warning: message }))) : undefined, event=>viewer?.event(event));
 const close = async () => { await viewer?.close(); await browser.close(); await tool.close(); await closeNative(); };
 const write = (line: string) => new Promise<void>((resolve, reject) => process.stdout.write(line, error => error ? reject(error) : resolve()));
@@ -300,9 +313,10 @@ if (command === '_serve') {
   const verification = { visual: { type: 'boolean' }, modelPath: { type: 'string' }, overlay: { type: 'boolean' }, expectedOutput: { type: 'string', minLength: 1, maxLength: 4000, description: 'Optional exact output line to check in non-editable AXStaticText after dispatch. Readback is separate from delivery; alreadyPresent means no causal proof.' } };
   const app = { type: 'string', description: 'Exact running app name or PID.' };
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
+    ...(process.env.CU_WORKFLOWS === '1' ? [{ name: 'desktop_workflow', description: 'Register, validate, find and run versioned workflows. The host agent authors steps. Read validation needs three distinct inputs including an asserted empty result; writes execute only the authorized original task. Never retry an uncertain write. Select an exact pageId/windowId when running.', inputSchema: z.toJSONSchema(WorkflowRequest) as any }] : []),
     { name: 'desktop_inspect', description: 'Automatically inspect an exact attached browser page or a native app. Sparse native Accessibility falls back to local OCR and visual detection. Returns the chosen route and actionable next steps when capture permission is missing. Never guesses a tab from an app name.', inputSchema: {type:'object',properties:{app,pageId:{type:'string'},frameId:{type:'string'},windowId:{type:'integer'},route:{enum:['auto','ax','vision','browser']},query:{type:'string'},modelPath:{type:'string'}},additionalProperties:false} },
     { name: 'desktop_pointer', description: 'Double-click, right-click, hover or drag between fresh observed refs. Mac uses app-directed background events; Linux uses its isolated display. Returns fresh observation. Mac compatibility remains app-dependent.', inputSchema: {type:'object',properties:{app,snapshotId:{type:'string'},ref:{type:'string'},targetRef:{type:'string'},gesture:{enum:['doubleClick','rightClick','hover','drag']}},required:['app','snapshotId','ref','gesture'],additionalProperties:false} },
-    { name: 'desktop_browser', description: 'Operate the session-owned browser without desktop pointer/focus changes. Open first, then list tabs and frames. Observe returns page/frame-bound refs and snapshotId. Handles dialogs, file inputs and downloads. attach connects an explicit local CDP endpoint; select the exact returned pageId. detach preserves existing tabs and the external browser. Mutations require checking the resulting page.', inputSchema: { type: 'object', properties: { endpoint:{type:'string'}, operation: { enum: browserOperations }, pageId: {type:'string'}, frameId:{type:'string'}, snapshotId:{type:'string'}, ref:{type:'string'}, targetRef:{type:'string'}, url:{type:'string'}, text:{type:'string'}, key:{type:'string'}, amount:{type:'number'}, value:{type:'string'}, paths:{type:'array',items:{type:'string'}}, dialogId:{type:'string'}, accept:{type:'boolean'}, downloadId:{type:'string'}, outputPath:{type:'string'} },required:['operation'],additionalProperties:false } },
+    { name: 'desktop_browser', description: 'Operate the session-owned browser without desktop pointer/focus changes. Open first, then list tabs and frames. Observe returns page/frame-bound refs and snapshotId. Handles dialogs, file inputs and downloads. attach connects an explicit local CDP endpoint; select the exact returned pageId. detach preserves existing tabs and the external browser. Mutations require checking the resulting page.', inputSchema: { type: 'object', properties: { query:{type:'string',maxLength:2000},nodeLimit:{type:'integer',minimum:1,maximum:400},includeText:{type:'boolean'},endpoint:{type:'string'}, operation: { enum: browserOperations }, pageId: {type:'string'}, frameId:{type:'string'}, snapshotId:{type:'string'}, ref:{type:'string'}, targetRef:{type:'string'}, url:{type:'string'}, text:{type:'string'}, key:{type:'string'}, amount:{type:'number'}, value:{type:'string'}, paths:{type:'array',items:{type:'string'}}, dialogId:{type:'string'}, accept:{type:'boolean'}, downloadId:{type:'string'}, outputPath:{type:'string'} },required:['operation'],additionalProperties:false } },
     { name: 'desktop_viewer', description: 'Start a live viewer for the session browser or selected Linux app. Returns a private control link and a separate read-only sharing link. Keep this session alive. Viewer takeover pauses agent writes.', inputSchema: { type:'object',properties:{app,windowId:{type:'integer'}},additionalProperties:false } },
     { name: 'desktop_input', description: 'Input in an isolated Linux desktop using the latest screenshot. Coordinates are local to the captured window. Returns fresh state; verify the outcome.', inputSchema: { type: 'object', properties: { app, snapshotId: { type: 'string' }, action: { type: 'object', properties: { kind: { enum: ['click','doubleClick','rightClick','hover','drag','type','key','scroll'] }, x: { type: 'number' }, y: { type: 'number' }, toX: { type: 'number' }, toY: { type: 'number' }, delivery: { enum: ['isolated','background'] }, text: { type: 'string' }, amount: { type: 'integer' } }, required: ['kind'], additionalProperties: false } }, required: ['app','snapshotId','action'], additionalProperties: false } },
     { name: 'desktop_pause', description: 'Cancel current input and pause this connection. Observations remain available.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
@@ -323,7 +337,7 @@ if (command === '_serve') {
   ] }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     try {
-      if (!['desktop_inspect', 'desktop_pointer', 'desktop_browser', 'desktop_viewer', 'desktop_pause', 'desktop_resume', 'desktop_input', 'desktop_capture', 'desktop_status', 'desktop_apps', 'desktop_installed_apps', 'desktop_launch', 'desktop_observe', 'desktop_act', 'desktop_execute', 'desktop_key', 'desktop_click', 'desktop_type', 'desktop_windows', 'desktop_wait'].includes(request.params.name)) throw new Error('Unknown tool');
+      if (!['desktop_workflow', 'desktop_inspect', 'desktop_pointer', 'desktop_browser', 'desktop_viewer', 'desktop_pause', 'desktop_resume', 'desktop_input', 'desktop_capture', 'desktop_status', 'desktop_apps', 'desktop_installed_apps', 'desktop_launch', 'desktop_observe', 'desktop_act', 'desktop_execute', 'desktop_key', 'desktop_click', 'desktop_type', 'desktop_windows', 'desktop_wait'].includes(request.params.name)) throw new Error('Unknown tool');
       const result = await tool.call(request.params.name.slice(8), request.params.arguments ?? {}, extra.signal);
       if (request.params.name === 'desktop_inspect' && result && typeof result === 'object' && 'image' in result) {
         const { image, ...observation } = result as { image: {base64:string}; [key:string]:unknown };

@@ -172,6 +172,13 @@ website signup or account setup. Linux X11 control is available through the nati
 - [Background execution](BACKGROUND_EXECUTION.md) · [Vision](VISION.md) ·
   [Validation evidence](VALIDATION.md)
 
+## Experimental workflows and benchmarks
+
+Agent-authored reusable workflows, Linux AT-SPI controls, and a Linux popup are
+now available for evaluation. See [workflow setup and recovery](docs/WORKFLOWS.md)
+and [benchmark methodology](docs/BENCHMARKS.md). MCP workflows require
+`CU_WORKFLOWS=1`; the end-to-end performance release gate remains pending.
+
 ## Development
 
 ```sh

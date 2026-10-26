@@ -9,7 +9,7 @@ export function resourcePaths(entry: string) {
   const root = dirname(dirname(compiled ? realpathSync(process.execPath) : entry));
   return {
     installer: join(root, 'download.sh'),
-    preview: process.env.CU_NATIVE_DIR ? join(process.env.CU_NATIVE_DIR, 'task-preview') : join(root, compiled ? 'libexec/task-preview' : 'native/macos/build/task-preview'),
+    preview: process.env.CU_NATIVE_DIR ? join(process.env.CU_NATIVE_DIR, 'task-preview') : join(root, compiled ? 'libexec/task-preview' : `native/${process.platform === 'linux' ? 'linux' : 'macos'}/build/task-preview`),
     driver: process.env.CU_NATIVE_DIR ? join(process.env.CU_NATIVE_DIR, 'desktop-driver') : join(root, compiled ? 'libexec/desktop-driver' : `native/${process.platform === 'linux' ? 'linux' : 'macos'}/build/desktop-driver`),
     skill: join(root, compiled ? 'share/jev/skill' : '.agents/skills/jev-desktop'),
   };

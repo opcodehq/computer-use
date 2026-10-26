@@ -36,6 +36,15 @@ export class DesktopTool {
     this.history = this.history.slice(-20);
   }
   constructor(private request: (method: string, args?: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>, private select: Selector = selectWithJev, private progress: (stage: string, candidate?: Candidate, snapshot?: Snapshot) => void = () => {}, private readonly interactionMode: 'background' | 'foreground' = process.env.JEV_INTERACTION_MODE === 'foreground' ? 'foreground' : 'background') {}
+  /** Display-only capture of the current observation; never re-observe or invalidate refs. */
+  async previewFrame(signal?:AbortSignal):Promise<{snapshot:Snapshot;image:string}|undefined> {
+    const snapshot=this.latest;if(!snapshot||this.busy)return undefined;
+    try {
+      const capture=Schema.decodeUnknownSync(Schema.Struct({base64:Schema.String}))(await this.request('screenshot',{snapshotId:snapshot.id},signal));
+      if(this.latest?.id!==snapshot.id)return undefined;
+      return {snapshot,image:capture.base64};
+    }catch{return undefined;}
+  }
   async call(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
     if (this.busy) throw new Error('Desktop is busy. Wait for the current call before issuing another.');
     this.busy = true;
@@ -170,7 +179,7 @@ export class DesktopTool {
         this.progress('observing');return {status:'dispatchedUnverified',result,snapshot:await observe()};
       }
       if (name === 'input') {
-        if (before.source !== 'visual') throw new Error('Raw input requires an isolated Linux visual session.');
+        if (before.source !== 'visual' && !(before.accessibilityBackend==='atspi' && before.visual && before.visual.model!=='unavailable')) throw new Error('Raw input requires a current isolated Linux screenshot. Inspect with visual=true first.');
         this.latest = undefined;
         this.progress('acting', undefined, before);
         const result = await request('linuxInput', { snapshotId: before.id, action: args.action });
@@ -192,7 +201,7 @@ export class DesktopTool {
       if (name === 'type' && (!args.text || args.text.length > 8000)) throw new Error('Supply 1–8000 characters of exact text.');
       let candidates: Candidate[];
       if (clicked) {
-        candidates = [{ id: 'click', description: `Click ${clicked.role}: ${clicked.name}`, action: { kind: this.interactionMode === 'background' && clicked.actions.includes('AXPress') && (before.windowOnScreen === false || !clicked.frame) ? 'press' : clicked.actions.includes('visualClick') ? 'visualClick' : this.interactionMode === 'background' ? 'backgroundClick' : 'clickElement', ref: clicked.ref } }];
+        candidates = [{ id: 'click', description: `Click ${clicked.role}: ${clicked.name}`, action: { kind: this.interactionMode === 'background' && clicked.actions.includes('AXPress') && (before.windowOnScreen === false || !clicked.frame || before.accessibilityBackend==='atspi') ? 'press' : clicked.actions.includes('visualClick') ? 'visualClick' : this.interactionMode === 'background' ? 'backgroundClick' : 'clickElement', ref: clicked.ref } }];
       } else if (keyboardTarget) {
         candidates = [{ id: 'keyboard', description: `${name === 'type' ? 'Type text' : `Press ${args.key}`} in ${keyboardTarget.name}`, action: { kind: name === 'type' ? before.source === 'visual' ? 'insertText' : 'backgroundText' : 'backgroundKey', ref: keyboardTarget.ref, text: name === 'type' ? args.text : args.key } }];
       } else if (name === 'key') {
@@ -281,8 +290,8 @@ function outputRefs(snapshot: Snapshot, expected: string) {
     .map(node => node.ref);
 }
 
-export function createDesktopTool(binary: string, progress: (event: Event) => void = () => {}) {
+export function createDesktopTool(binary: string, progress: (event: Event) => void = () => {}, captureHook?: (method:string, run:()=>Promise<unknown>)=>Promise<unknown>) {
   const runtime = ManagedRuntime.make(driverLayer(binary));
-  const tool = new DesktopTool((method, args, signal) => runtime.runPromise(Effect.flatMap(DesktopDriver, driver => driver.request(method, args)), { signal }), selectWithJev, (state, candidate, snapshot) => progress({ state, candidate, snapshot, message: state === 'acting' ? 'Applying your agent’s action.' : 'Reading fresh app state.' }));
+  const tool = new DesktopTool((method, args, signal) => { const run=()=>runtime.runPromise(Effect.flatMap(DesktopDriver, driver => driver.request(method, args)), { signal });return captureHook?captureHook(method,run):run(); }, selectWithJev, (state, candidate, snapshot) => progress({ state, candidate, snapshot, message: state === 'acting' ? 'Applying your agent’s action.' : 'Reading fresh app state.' }));
   return { tool, close: () => runtime.dispose() };
 }

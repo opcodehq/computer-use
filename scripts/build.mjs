@@ -17,3 +17,13 @@ await build({ entryPoints: ['src/desktop/cli.ts'], outfile: 'dist/desktop-api.mj
 for (const [source,name] of [['index','service'],['protocol','protocol']]) await build({ entryPoints: [`src/desktop/${source}.ts`], outfile: `dist/desktop-${name}.mjs`, bundle: true, platform: 'node', format: 'esm', packages: 'external' });
 const {execFileSync}=await import('node:child_process');
 execFileSync('node',['node_modules/typescript/bin/tsc','--declaration','--emitDeclarationOnly','--skipLibCheck','--module','NodeNext','--target','ES2022','--outDir','dist/types','--rootDir','src','src/desktop/index.ts'],{stdio:'inherit'});
+
+await build({ entryPoints: ['src/benchmark/report.ts'], outfile: 'dist/benchmark-report.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+
+await build({ entryPoints: ['scripts/pomerado-harness.mjs'], outfile: 'dist/pomerado-harness.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+
+await build({ entryPoints: ['scripts/pomerado-probe.mjs'], outfile: 'dist/pomerado-probe.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+
+await build({ entryPoints: ['scripts/benchmark-pomerado-runtime.mjs'], outfile: 'dist/benchmark-pomerado-runtime.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external' });
+
+await build({ entryPoints: ['src/linux/driver.ts'], outfile: 'dist/linux-driver.mjs', bundle: true, platform: 'node', format: 'esm', packages: 'external' });

@@ -10,7 +10,7 @@ const bundle=resolve('.context/browser-attach-tools.mjs');
 await build({entryPoints:['src/browser/tools.ts'],outfile:bundle,bundle:true,packages:'external',platform:'node',format:'esm'});
 const {BrowserTools}=await import(bundle+'?t='+Date.now());
 const dir=await mkdtemp(join(tmpdir(),'cu-attach-'));
-const chrome=spawn('google-chrome',['--headless=new','--no-sandbox','--remote-debugging-port=0','--user-data-dir='+dir,'--no-first-run','about:blank'],{stdio:'ignore'});
+const chrome=spawn(process.env.TEST_CHROME_PATH ?? 'google-chrome',['--headless=new','--no-sandbox','--remote-debugging-port=0','--user-data-dir='+dir,'--no-first-run','about:blank'],{stdio:'ignore'});
 let controller;const tool=new BrowserTools();
 try {
  let port='';for(let i=0;i<100&&!port;i++){port=(await readFile(join(dir,'DevToolsActivePort'),'utf8').catch(()=>'' )).split('\n')[0]??'';if(!port)await delay(100);}

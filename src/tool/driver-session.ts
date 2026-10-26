@@ -2,10 +2,10 @@ import { browserReads } from '../browser/tools.js';
 import { Schema } from 'effect';
 import { SnapshotSchema, type Event } from '../shared/contracts.js';
 
-type Preview = { send(event: Event): void; close(): Promise<void> };
+type Preview = { send(event: Event): void; close(): Promise<void>; capture?<T>(run:()=>Promise<T>):Promise<T> };
 type Call = (method: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>;
 const writes = new Set(['execute', 'type', 'key', 'click', 'act', 'launch', 'input', 'pointer']);
-const visible = new Set(['browser', 'preview', 'inspect', 'observe', 'capture', 'wait', ...writes]);
+const visible = new Set(['workflow', 'browser', 'preview', 'inspect', 'observe', 'capture', 'wait', ...writes]);
 
 /** One host-agent session owns input, refs and its display-only preview. */
 export class DriverSession {
@@ -16,6 +16,7 @@ export class DriverSession {
   private needsObservation = false;
   private controller = new AbortController();
   constructor(private invoke: Call, private open: (stop: () => void) => Promise<Preview | undefined>, private observeEvent: (event: Event) => void = () => {}) {}
+  captureFrame<T>(run:()=>Promise<T>):Promise<T> { return this.preview?.capture ? this.preview.capture(run) : run(); }
   get hasPreview() { return Boolean(this.preview); }
   event(event: Event) { const next=this.paused ? { ...event, state: 'stopped' } : event; this.preview?.send(next); this.observeEvent(next); }
   stop() {
@@ -31,9 +32,9 @@ export class DriverSession {
       this.event({ state: 'resumed', message: 'Ready for your agent. Observe before choosing the next action.' });
       return { status: 'ready', next: 'Observe fresh state before acting.' };
     }
-    const mutating = writes.has(method) || (method === 'browser' && !browserReads.has(String(args.operation)));
+    const mutating = (method === 'workflow' && !['find','get','receipt','schema'].includes(String(args.operation))) || writes.has(method) || (method === 'browser' && !browserReads.has(String(args.operation)));
     if (this.paused && mutating) throw Object.assign(new Error('Computer input is paused. Resume explicitly, then observe before acting.'), { code: 'UserStopped', delivery: 'notDispatched' });
-    if (this.needsObservation && mutating && method !== 'launch' && !(method === 'browser' && args.operation === 'open')) throw new Error('Observe fresh state after resuming before acting.');
+    if (this.needsObservation && mutating && method !== 'launch' && method !== 'workflow' && !(method === 'browser' && args.operation === 'open')) throw new Error('Observe fresh state after resuming before acting.');
     this.busy = true;
     try {
       if (method === 'preview') { await this.preview?.close(); this.preview = undefined; this.opened = false; }

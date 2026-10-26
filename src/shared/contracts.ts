@@ -3,12 +3,14 @@ import { Schema } from 'effect';
 export const NodeSchema = Schema.Struct({
   visualSource: Schema.optional(Schema.Literals(['yolo','ocr'])), detectionConfidence: Schema.optional(Schema.Number),
   focused: Schema.optional(Schema.Boolean),
+  visible: Schema.optional(Schema.Boolean),
   frame: Schema.optional(Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number })),
   ref: Schema.String, role: Schema.String, name: Schema.String,
   value: Schema.String, enabled: Schema.Boolean,
   actions: Schema.Array(Schema.String), depth: Schema.Number,
 });
 export const SnapshotSchema = Schema.Struct({
+  accessibilityBackend: Schema.optional(Schema.Literals(['ax','atspi'])),
   visual: Schema.optional(Schema.Struct({ model: Schema.String, durationMs: Schema.Number, regionCount: Schema.Number, warning: Schema.optional(Schema.String) })),
   windowOnScreen: Schema.optional(Schema.Boolean), observationErrors: Schema.optional(Schema.Number), windowId: Schema.optional(Schema.Number), windowListed: Schema.optional(Schema.Boolean), capturedAt: Schema.optional(Schema.String),
   id: Schema.String, source: Schema.Literals(['ax', 'dom', 'visual']),

@@ -10,6 +10,7 @@ import {
   type ElementHandle,
   type Dialog,
   type Download,
+  type JSHandle,
 } from "playwright-core";
 import { randomUUID } from "node:crypto";
 import {
@@ -40,6 +41,7 @@ const operations = [
   "closeTab",
   "frames",
   "observe",
+  "readJson",
   "navigate",
   "back",
   "forward",
@@ -50,6 +52,7 @@ const operations = [
   "hover",
   "drag",
   "fill",
+  "insertText",
   "key",
   "scroll",
   "select",
@@ -69,6 +72,7 @@ export const browserReads = new Set([
   "dialogs",
   "downloads",
   "capture",
+  "readJson",
 ]);
 function required(input: Record<string, unknown>, key: string): string {
   const value = input[key];
@@ -92,6 +96,8 @@ export class BrowserTools {
   private pages = new Map<string, Page>();
   private frames = new Map<string, Frame>();
   private refs = new Map<string, Binding>();
+  private lazyRefs = new Map<string, { pool: JSHandle; index: number; page: Page; frame: Frame; url: string }>();
+  private pools: JSHandle[] = [];
   private snapshotId = "";
   private observedPage?: Page;
   private active?: Page;
@@ -141,6 +147,9 @@ export class BrowserTools {
     for (const b of this.refs.values())
       void b.element.dispose().catch(() => {});
     this.refs.clear();
+    this.lazyRefs.clear();
+    for (const pool of this.pools) void pool.dispose().catch(() => {});
+    this.pools = [];
   }
   private page(input: Record<string, unknown>) {
     const id = required(input, "pageId");
@@ -160,7 +169,15 @@ export class BrowserTools {
       this.observedPage !== page
     )
       throw new Error("Stale browser snapshot. Observe again.");
-    const b = this.refs.get(required(input, key));
+    const ref = required(input, key);
+    const lazy = this.lazyRefs.get(ref);
+    if (!this.refs.has(ref) && lazy) {
+      const handle = await lazy.pool.evaluateHandle((pool: any, index: number) => pool.elements[index], lazy.index);
+      const element = handle.asElement();
+      if (!element) { await handle.dispose(); throw new Error("Stale browser ref."); }
+      this.refs.set(ref, { ...lazy, element: element as ElementHandle });
+    }
+    const b = this.refs.get(ref);
     if (
       !b ||
       b.page !== page ||
@@ -171,7 +188,8 @@ export class BrowserTools {
       throw new Error("Stale browser ref.");
     return b;
   }
-  private async snapshot(page: Page, frameId?: unknown) {
+  private async snapshot(page: Page, frameId?: unknown, options: { query?: string; nodeLimit?: number; includeText?: boolean } = {}) {
+    const started = performance.now();
     this.invalidate();
     this.observedPage = page;
     this.active = page;
@@ -188,52 +206,32 @@ export class BrowserTools {
       const fid =
         [...this.frames].find(([, f]) => f === frame)?.[0] ?? randomUUID();
       this.frames.set(fid, frame!);
-      const handles = await frame!.$$(
-        'button,a,input,textarea,select,[role="button"],[contenteditable="true"],h1,h2,h3,p,[role="status"],[role="alert"]',
-      );
-      for (const element of handles) {
-        if (nodes.length >= 400) {
-          truncated = true;
-          await element.dispose();
-          continue;
-        }
-        const data = await element
-          .evaluate((el) => {
-            const input =
-              el instanceof HTMLInputElement ||
-              el instanceof HTMLTextAreaElement;
-            const secure =
-              el instanceof HTMLInputElement && el.type === "password";
-            const rect = el.getBoundingClientRect();
-            return {
-              role: el.getAttribute("role") ?? el.tagName.toLowerCase(),
-              name: (
-                el.getAttribute("aria-label") ??
-                el.getAttribute("placeholder") ??
-                el.textContent ??
-                ""
-              ).slice(0, 1500),
-              value: secure ? "[secure]" : input ? el.value.slice(0, 2000) : "",
-              secure,
-              visible: rect.width > 0 && rect.height > 0,
-              type: el.getAttribute("type"),
-              enabled: !el.hasAttribute("disabled"),
-              bounds: {
-                x: rect.x,
-                y: rect.y,
-                width: rect.width,
-                height: rect.height,
-              },
-            };
-          })
-          .catch(() => undefined);
-        if (!data) {
-          await element.dispose();
-          continue;
-        }
-        const ref = id + ":" + nodes.length;
-        this.refs.set(ref, { page, frame: frame!, element, url: frame!.url() });
-        nodes.push({ ref, frameId: fid, ...data });
+      // Retain exact elements in one remote object. Only resolve a handle when acted on.
+      const pool = await frame!.evaluateHandle(({ limit, query }: { limit: number; query?: string }) => {
+        const selector = 'button,a,input,textarea,select,[role="button"],[contenteditable="true"],h1,h2,h3,p,td,th,summary,[role="cell"],[role="checkbox"],[role="radio"],[role="combobox"],[role="option"],[role="menuitem"],[role="tab"],[role="switch"],[role="status"],[role="alert"]';
+        const all = Array.from(document.querySelectorAll(selector));
+        const candidates = query ? all.filter(el => (el.getAttribute('aria-label') ?? el.getAttribute('placeholder') ?? el.textContent ?? '').includes(query)) : all;
+        const elements = candidates.slice(0, limit);
+        const nodes = elements.map(el => {
+          const input = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
+          const secure = el instanceof HTMLInputElement && el.type === 'password';
+          const rect = el.getBoundingClientRect();
+          return { role: el.getAttribute('role') ?? el.tagName.toLowerCase(),
+            name: (el.getAttribute('aria-label') ?? el.getAttribute('placeholder') ?? el.textContent ?? '').slice(0, 1500),
+            value: secure ? '[secure]' : input ? el.value.slice(0, 2000) : (el.textContent ?? '').trim().slice(0, 2000), secure,
+            visible: rect.width > 0 && rect.height > 0 && el.checkVisibility({opacityProperty:true,visibilityProperty:true}), type: el.getAttribute('type'),
+            enabled: !el.matches(':disabled') && el.getAttribute('aria-disabled') !== 'true',
+            bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+        });
+        return { elements, nodes, truncated: candidates.length > limit };
+      }, { limit: (options.nodeLimit ?? 400) - nodes.length, query: options.query });
+      this.pools.push(pool);
+      const data = await pool.evaluate(pool => ({ nodes: pool.nodes, truncated: pool.truncated }));
+      truncated ||= data.truncated;
+      for (const [index, dataNode] of data.nodes.entries()) {
+        const ref = id + ':' + nodes.length;
+        this.lazyRefs.set(ref, { pool, index, page, frame: frame!, url: frame!.url() });
+        nodes.push({ ref, frameId: fid, ...dataNode });
       }
     }
     this.snapshotId = id;
@@ -247,7 +245,9 @@ export class BrowserTools {
       truncated,
       dialogs: this.dialogList(),
       downloads: this.downloadList(),
-      text: (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).slice(0, 24000),
+      text: options.includeText === false ? undefined : (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).slice(0, 24000),
+      scope: options.query ? { query: options.query } : undefined,
+      timingMs: { observation: performance.now() - started },
       deliveryMode: "browser-protocol-background",
     };
   }
@@ -435,7 +435,27 @@ export class BrowserTools {
           main: frame === page.mainFrame(),
         };
       });
-    if (operation === "observe") return this.snapshot(page, input.frameId);
+    if (operation === "observe") {
+      if(input.query!==undefined && (typeof input.query!=='string'||input.query.length>2000)) throw new Error('query must be at most 2000 characters.');
+      if(input.nodeLimit!==undefined && (!Number.isInteger(input.nodeLimit)||Number(input.nodeLimit)<1||Number(input.nodeLimit)>400)) throw new Error('nodeLimit must be 1–400.');
+      return this.snapshot(page, input.frameId, {query:input.query as string|undefined,nodeLimit:input.nodeLimit as number|undefined,includeText:input.includeText!==false});
+    }
+    if (operation === 'readJson') {
+      if(process.env.CU_BENCH_ROUTE==='ui')throw new Error('Direct HTTP is disabled in the UI-only benchmark track.');
+      // Host-bound read acceleration: GET only, same origin, no caller headers or secrets.
+      const destination = new URL(required(input,'url'),page.url());
+      if(destination.origin!==new URL(page.url()).origin || destination.username || destination.password || destination.hash) throw new Error('JSON read must remain on the current origin.');
+      return page.evaluate(async href => {
+        const response=await fetch(href,{credentials:'same-origin',redirect:'error',signal:AbortSignal.timeout(30000)});
+        if(!response.ok || !response.headers.get('content-type')?.includes('json')) throw new Error('Expected a successful JSON response.');
+        const reader=response.body?.getReader();if(!reader)throw new Error('Missing response body.');
+        const parts:Uint8Array[]=[];let bytes=0;
+        try { while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>1048576)throw new Error('JSON response exceeds 1 MiB.');parts.push(part.value);} }
+        finally {await reader.cancel().catch(()=>{});}
+        const all=new Uint8Array(bytes);let offset=0;for(const part of parts){all.set(part,offset);offset+=part.length;}
+        return JSON.parse(new TextDecoder().decode(all));
+      },destination.href);
+    }
     if (operation === "capture")
       return {
         pageId: this.pageId(page),
@@ -461,7 +481,7 @@ export class BrowserTools {
     }
     signal?.throwIfAborted();
     const attachedMac = Boolean(this.attached) && process.platform === 'darwin';
-    if (attachedMac && ['key','doubleClick','rightClick','hover','drag'].includes(operation))
+    if (attachedMac && ['key','insertText','doubleClick','rightClick','hover','drag'].includes(operation))
       throw new Error('This attached Mac gesture would require focus-sensitive browser input. Use a native semantic control or an isolated browser. No event sent.');
     let action: () => Promise<unknown>;
     if (operation === "navigate") {
@@ -509,13 +529,17 @@ export class BrowserTools {
     } else {
       const b = await this.binding(input, page);
       if (operation === "fill") {
-        const text = required(input, "text");
+        if(typeof input.text!=='string'||input.text.length>16000)throw new Error('Supply text up to 16000 characters.');
+        const text=input.text;
         action = attachedMac ? () => b.element.evaluate((el, text) => {
           if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) || el.disabled || el.readOnly || (el instanceof HTMLInputElement && el.type === 'password')) throw new Error('Unsupported DOM text field.');
           const prototype = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
           Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(el, text);
           el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
         }, text) : () => b.element.fill(text);
+      } else if(operation==='insertText') {
+        const text=required(input,'text');
+        action=()=>b.element.type(text);
       } else if (operation === "upload") {
         if (
           !Array.isArray(input.paths) ||

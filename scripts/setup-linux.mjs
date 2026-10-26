@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 if (process.platform !== "linux") throw new Error("Linux required.");
 // System packages are installed by the image owner; no implicit sudo or shell script downloads.
 // Attach-only hosts do not need Xvfb.
-execFileSync(process.execPath, ["scripts/build-linux.mjs"], {
+execFileSync(process.execPath, ["scripts/build-linux.mjs",...process.argv.slice(2)], {
   stdio: "inherit",
 });
 if (process.argv.includes('--with-model')) {

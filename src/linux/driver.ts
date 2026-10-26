@@ -1,20 +1,25 @@
+import { LinuxAccessibility } from './accessibility.js';
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readFile, access } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 import type { LinuxVision } from "./vision.js";
 import type { Snapshot } from "../shared/contracts.js";
 const exec = promisify(execFile);
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), basename(fileURLToPath(import.meta.url))==='linux-driver.mjs'?'..':'../..');
 const helper =
   process.env.CU_X11_HELPER ?? resolve(root, "native/linux/build/cu-x11");
 const model =
   process.env.CU_YOLO_MODEL_PATH ?? resolve(root, ".models/ui-detector.onnx");
 let vision: LinuxVision | undefined;
+let accessibility: LinuxAccessibility | undefined;
+let semantic: { snapshot: Snapshot; window: WindowInfo; at: number } | undefined;
+const accessibilityBinary = resolve(dirname(helper), 'cu-atspi');
+async function semanticDriver() { await access(accessibilityBinary); return accessibility ??= new LinuxAccessibility(accessibilityBinary); }
 async function detect(png:Buffer,id:string){vision ??= new (await import("./vision.js")).LinuxVision();return vision.analyze(png,id,model);}
 async function regionsFor(png:Buffer,id:string,width:number,height:number){
  const raw={regions:[],width,height,model:'raw'};
@@ -64,7 +69,7 @@ function isolated() {
 }
 async function windows(): Promise<WindowInfo[]> {
   isolated();
-  return JSON.parse((await command(["list"])).toString());
+  return (JSON.parse((await command(["list"])).toString()) as WindowInfo[]).filter(w=>w.title!=='Opcode CU Preview');
 }
 async function capture(w: WindowInfo) {
   const raw = await command(["capture", String(w.id)]);
@@ -124,7 +129,7 @@ async function dispatch(r: Record<string, any>) {
     } catch {}
     return {
       platform: "linux",
-      accessibility: false,
+      accessibility: await (async () => { try { return Boolean((await (await semanticDriver()).call('status')).available); } catch { return false; } })(),
       screenRecording: available,
       isolated: process.env.CU_LINUX_DESKTOP === "1",
       displayReady: available,
@@ -153,6 +158,7 @@ async function dispatch(r: Record<string, any>) {
       .map((w) => ({ id: w.id, windowId: w.id, title: w.title }));
   if (r.method === "snapshot") {
     current = undefined;
+    semantic = undefined;
     const list = (await windows()).filter(
       (w) =>
         w.pid === r.pid && (r.windowId === undefined || w.id === r.windowId),
@@ -162,6 +168,14 @@ async function dispatch(r: Record<string, any>) {
         "Select exactly one visible window with windowId.",
         "WindowAmbiguous",
       );
+    if (process.env.CU_ACCESSIBILITY !== 'off') {
+      try {
+        const window = list[0]!;
+        const snapshot = await (await semanticDriver()).snapshot(window.pid, window.title, window.id);
+        semantic = { snapshot, window, at: Date.now() };
+        return snapshot;
+      } catch { /* An unsupported app keeps the existing visual route. */ }
+    }
     const started = performance.now();
     const window = list[0]!,
       png = await capture(window),
@@ -229,6 +243,12 @@ async function dispatch(r: Record<string, any>) {
     current = { snapshot, window, png, at: Date.now(), regions };
     return snapshot;
   }
+  if (r.method === "detect" && semantic && semantic.snapshot.id === r.snapshotId) {
+    const png = await capture(semantic.window);
+    const regions = await regionsFor(png, semantic.snapshot.id, semantic.window.width, semantic.window.height);
+    current={snapshot:{...semantic.snapshot,nodes:[...semantic.snapshot.nodes,...regions.regions.map(region=>({ref:region.ref,role:region.source==='yolo'?'VisualControl':'VisualText',name:region.label,value:'',enabled:true,depth:1,actions:['visualClick'],frame:{x:region.bounds.x+semantic!.window.x,y:region.bounds.y+semantic!.window.y,width:region.bounds.width,height:region.bounds.height}}))]},window:semantic.window,png,at:Date.now(),regions};
+    return { snapshotId: semantic.snapshot.id, ...regions, pointSize:{width:semantic.window.width,height:semantic.window.height}, origin:{x:semantic.window.x,y:semantic.window.y}, actionable:true, image:png.toString('base64'),durationMs:0 };
+  }
   if (r.method === "detect") {
     const c = await fresh(r.snapshotId);
     return {
@@ -243,7 +263,7 @@ async function dispatch(r: Record<string, any>) {
     };
   }
   if (r.method === "screenshot") {
-    const c = await fresh(r.snapshotId);
+    const c = semantic && semantic.snapshot.id === r.snapshotId ? semantic : await fresh(r.snapshotId);
     const png = await capture(c.window);
     return {
       base64: png.toString("base64"),
@@ -264,6 +284,24 @@ async function dispatch(r: Record<string, any>) {
   throw error("Unsupported Linux driver method: " + r.method, "Unsupported");
 }
 async function executeLegacy(r: Record<string, any>) {
+    if (r.method === 'execute' && semantic && semantic.snapshot.id === r.snapshotId && ['press','setValue'].includes(r.action?.kind)) {
+      const saved = semantic;
+      const window = (await windows()).find(w => w.id === saved.window.id && w.pid === saved.window.pid);
+      if (!window || JSON.stringify(window) !== JSON.stringify(saved.window) || Date.now()-saved.at>30000) throw error('Stale accessibility window.', 'StaleTarget');
+      semantic = undefined;current=undefined;
+      try { return await (await semanticDriver()).call('execute', { snapshotId:r.snapshotId, action:r.action }); }
+      catch { throw error('Accessibility delivery uncertain; observe before retry.', 'InputFailed', 'unknown'); }
+    }
+    if (r.method==='execute' && semantic?.snapshot.id===r.snapshotId) {
+      for(const ref of [r.action?.ref,r.action?.targetRef].filter(Boolean)) {
+        const node=semantic?.snapshot.nodes.find(n=>n.ref===ref);
+        if(node){
+          const checked=await (await semanticDriver()).call('check',{snapshotId:r.snapshotId,action:{ref}});
+          if(node.frame && JSON.stringify(node.frame)!==JSON.stringify(checked.frame))throw error('Accessibility target moved; observe again.','StaleTarget');
+          if(['backgroundKey','backgroundText'].includes(r.action?.kind)&&!checked.focused)throw error('Keyboard receiver lost focus.','StaleTarget');
+        }
+      }
+    }
     const c = await fresh(r.snapshotId);
     const a = r.action;
     if (!a || typeof a !== "object") throw error("Supply an action.");
@@ -274,19 +312,19 @@ async function executeLegacy(r: Record<string, any>) {
     if (r.method === "execute") {
       const node = c.snapshot.nodes.find((n) => n.ref === a.ref);
       if (!node) throw error("Unknown ref.", "StaleTarget");
-      if (["visualClick","doubleClick","rightClick","hover","drag"].includes(kind) && node.frame) {
+      if (["visualClick","backgroundClick","clickElement","doubleClick","rightClick","hover","drag"].includes(kind) && node.frame) {
         x = node.frame.x - c.window.x + node.frame.width / 2;
         y = node.frame.y - c.window.y + node.frame.height / 2;
-        if(kind === "visualClick") kind = "click";
+        if(["visualClick","backgroundClick","clickElement"].includes(kind)) kind = "click";
         if(kind === "drag") {
           const destination=c.snapshot.nodes.find(n=>n.ref===a.targetRef&&n.enabled&&n.value!=="[secure]"&&n.frame);
           if(!destination?.frame) throw error("Unknown drag target.","StaleTarget");
           a.toX=destination.frame.x-c.window.x+destination.frame.width/2;
           a.toY=destination.frame.y-c.window.y+destination.frame.height/2;
         }
-      } else if (kind === "insertText" && node.role === "VisualKeyboard")
+      } else if (["insertText","backgroundText"].includes(kind) && (node.role === "VisualKeyboard" || (c.snapshot.accessibilityBackend==='atspi' && node.focused && node.actions.includes('setValue'))))
         kind = "type";
-      else if (kind === "backgroundKey" && node.role === "VisualKeyboard")
+      else if (kind === "backgroundKey" && (node.role === "VisualKeyboard" || (c.snapshot.accessibilityBackend==='atspi' && node.focused)))
         kind = "key";
       else throw error("Unsupported Linux ref action.");
     }
@@ -355,7 +393,7 @@ async function executeLegacy(r: Record<string, any>) {
         "Screen changed since observation. Observe again.",
         "StaleTarget",
       );
-    current = undefined;
+    current = undefined;semantic=undefined;
     try {
       await command(args, delivery);
     } catch {
@@ -393,3 +431,4 @@ for await (const line of input) {
   }
 }
 await vision?.close();
+accessibility?.close();
