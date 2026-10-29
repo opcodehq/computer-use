@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { chromium, type BrowserContext } from 'playwright-core';
-import { build } from 'esbuild';
 import { createServer } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js';
@@ -24,7 +25,9 @@ const chrome = process.env.TEST_CHROME_PATH ?? (process.platform === 'darwin' ? 
   const profile = join(workspace, 'profile');
   let ownedBrowser: BrowserContext | undefined;
   try {
-    await build({ entryPoints: ['src/tool/cli.ts'], outfile: cli, bundle: true, packages: 'external', platform: 'node', format: 'esm' });
+    // Keep the compiler outside the test runner's shared worker lifecycle.
+    const compiler = createRequire(import.meta.url).resolve('esbuild/bin/esbuild');
+    execFileSync(compiler, ['src/tool/cli.ts', '--bundle', '--packages=external', '--platform=node', '--format=esm', `--outfile=${cli}`], { cwd: process.cwd(), stdio: 'pipe' });
     ownedBrowser = await chromium.launchPersistentContext(profile, { headless: true, executablePath: chrome, args: ['--remote-debugging-port=0', '--no-sandbox'] });
     const port = (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
     assert.match(port, /^\d+$/, 'Owned Chrome must publish its debugging port');
