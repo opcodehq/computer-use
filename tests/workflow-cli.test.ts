@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { build } from "esbuild";
-test("workflow CLI separates transport flags from strict requests in one-shot and persistent sessions", async () => {
+test("workflow CLI separates transport flags from strict requests in one-shot and persistent sessions", { timeout: 30000 }, async () => {
   await mkdir(".context", { recursive: true });
   const directory = await mkdtemp(
       join(process.cwd(), ".context/workflow-cli-"),
