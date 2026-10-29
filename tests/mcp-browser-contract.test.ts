@@ -1,21 +1,33 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { chromium, type BrowserContext } from 'playwright-core';
+import { build } from 'esbuild';
 import { createServer } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv-provider.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-const chrome = process.env.TEST_CHROME_PATH ?? '/usr/bin/google-chrome';
+const chrome = process.env.TEST_CHROME_PATH ?? (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome');
 (existsSync(chrome) ? test : test.skip)('MCP exposes batch fields and returns usable fresh form state', { timeout: 30000 }, async () => {
   const server = createServer((_req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.end('<title>MCP form</title><label>Customer<input name="customer"></label><label>Owner<select><option value="a">Alex</option><option value="m">Maya</option></select></label>');
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-  const transport = new StdioClientTransport({ command: process.execPath, args: ['src/tool/cli.ts', 'mcp', '--no-preview'], cwd: process.cwd(), stderr: 'pipe' });
+  const workspace = await mkdtemp(join(process.cwd(), '.context-mcp-contract-'));
+  const cli = join(workspace, 'cli.mjs');
+  const transport = new StdioClientTransport({ command: 'node', args: [cli, 'mcp', '--no-preview'], cwd: process.cwd(), stderr: 'pipe' });
   const client = new Client({ name: 'contract-test', version: '1' });
+  const profile = join(workspace, 'profile');
+  let ownedBrowser: BrowserContext | undefined;
   try {
+    await build({ entryPoints: ['src/tool/cli.ts'], outfile: cli, bundle: true, packages: 'external', platform: 'node', format: 'esm' });
+    ownedBrowser = await chromium.launchPersistentContext(profile, { headless: true, executablePath: chrome, args: ['--remote-debugging-port=0', '--no-sandbox'] });
+    const port = (await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0];
+    assert.match(port, /^\d+$/, 'Owned Chrome must publish its debugging port');
     await client.connect(transport);
     const catalog = await client.listTools();
     const browser = catalog.tools.find(tool => tool.name === 'desktop_browser')!;
@@ -38,13 +50,13 @@ const chrome = process.env.TEST_CHROME_PATH ?? '/usr/bin/google-chrome';
     assert.equal((keyboard.inputSchema.properties as Record<string, any>).key.enum, undefined);
     const call = async (args: Record<string, unknown>): Promise<any> => {
       const result = await client.callTool({ name: 'desktop_browser', arguments: args });
-      assert.notEqual(result.isError, true);
+      assert.notEqual(result.isError, true, JSON.stringify(result));
       const content = result.content as Array<{ type: string; text?: string }>;
       const value = JSON.parse(content.find(item => item.type === 'text')!.text!);
       assert.notEqual(value.status, 'error', JSON.stringify(value));
       return value;
     };
-    const opened = await call({ operation: 'open' });
+    const opened = await call({ operation: 'attach', endpoint: `http://127.0.0.1:${port}` });
     const pageId = opened.tabs[0].id;
     const address = server.address();
     assert.ok(address && typeof address !== 'string');
@@ -58,7 +70,15 @@ const chrome = process.env.TEST_CHROME_PATH ?? '/usr/bin/google-chrome';
     assert.equal(filled.nodes.find((node: any) => node.name === 'Customer').value, 'Harbor');
     assert.equal(filled.nodes.find((node: any) => node.name === 'Owner').value, 'm');
   } finally {
-    await client.close();
-    await new Promise<void>(resolve => server.close(() => resolve()));
+    try {
+      await ownedBrowser?.close();
+    } finally {
+      try {
+        await client.close();
+      } finally {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+        await rm(workspace, { recursive: true, force: true });
+      }
+    }
   }
 });
