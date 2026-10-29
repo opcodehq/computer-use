@@ -1,0 +1,164 @@
+{
+  "date": "2026-10-30",
+  "sourceCommit": "c23bb834c76eed43fa454adadeb189d76eab2b20",
+  "frozenCliSha256": "658ee57258a9c7498182ba09468e33f36bdca842169daa263565d26ea6140ccc",
+  "nativeHelperSha256": "cbf8ea1c1292183c3939eefe0e07a2a2538f7f4237f2485b67e80833a382ef97",
+  "fixtureSha256": "2db2843dcd2c152bf89fde5490b1bba9ea6a1da4a3b35afb3895fafb7c90a60c",
+  "deadlineMs": 180000,
+  "browser": {
+    "current": {
+      "route": "Default headless browser DOM via source CU CLI",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "context": "Fresh process/context per task; provider/system caches uncontrolled",
+      "tasks": [
+        {
+          "task": "project",
+          "pass": true,
+          "goalStatePass": true,
+          "elapsedMs": 31823.953167,
+          "firstToolStartMs": 6427.102083999999,
+          "firstEventMs": 425.18224999999995,
+          "toolCallCount": 7,
+          "toolErrors": [],
+          "grade": {
+            "exactProject": true,
+            "singleSave": true,
+            "reopened": true,
+            "reviewed": true
+          },
+          "trace": "project-trial-1.jsonl"
+        },
+        {
+          "task": "triage",
+          "pass": true,
+          "goalStatePass": true,
+          "elapsedMs": 64930.19562499999,
+          "firstToolStartMs": 7011.546291999999,
+          "firstEventMs": 716.1709580000024,
+          "toolCallCount": 19,
+          "toolErrors": [],
+          "grade": {
+            "OPS-104": true,
+            "OPS-109": true,
+            "OPS-112": true,
+            "noOtherWrites": true,
+            "noOtherChanges": true,
+            "reopened": true
+          },
+          "trace": "triage-trial-1.jsonl"
+        },
+        {
+          "task": "report",
+          "pass": true,
+          "goalStatePass": true,
+          "elapsedMs": 44704.02291700001,
+          "firstToolStartMs": 8317.863624999998,
+          "firstEventMs": 440.35062499999185,
+          "toolCallCount": 10,
+          "toolErrors": [],
+          "grade": {
+            "exactReport": true,
+            "singleSave": true,
+            "reopened": true,
+            "readBothPages": true
+          },
+          "trace": "report-trial-1.jsonl"
+        }
+      ]
+    },
+    "reference": {
+      "status": "setup_unavailable",
+      "taskTimersStarted": false,
+      "elapsedMs": null,
+      "reasons": [
+        "Native Chrome app observation timed out before any task input, both concurrent and sequential owned GUI setup.",
+        "Built-in browser provider unavailable; browser inventory empty."
+      ],
+      "classification": "Not task failure or completion latency."
+    }
+  },
+  "finder": {
+    "reference": {
+      "route": "Built-in native host computer tool",
+      "elapsedMs": 87362,
+      "passed": true,
+      "checks": {
+        "exactFiles": true,
+        "exactFolders": true,
+        "allHashes": true
+      },
+      "toolCalls": 19,
+      "inputActions": 39,
+      "strategy": "Observed grouping, rename and duplicate controls; no drag capability claim.",
+      "errors": [
+        {
+          "type": "ScreenCaptureKit",
+          "code": -3811,
+          "message": "Failed to start stream due to audio/video capture failure",
+          "recovery": "Fresh AX observation confirmed rename editor; continued without replaying click"
+        },
+        {
+          "type": "operatorRename",
+          "message": "First brief rename retained original extension, producing customer-brief.txt.txt",
+          "recovery": "Fresh editor then select-all and exact full filename"
+        },
+        {
+          "type": "operatorTyping",
+          "message": "Finance text sent immediately after menu grouping did not rename new folder",
+          "recovery": "Observed field then confirmed editor and typed Finance"
+        }
+      ],
+      "inputIsolation": "Foreground, Space and cursor were not independently instrumented."
+    },
+    "current": {
+      "route": "Fresh source CU CLI + source-built helper, background Finder contextual Copy and destination Move Item Here, no model calls or global events",
+      "elapsedMs": 4207,
+      "passed": false,
+      "checks": {
+        "exactFiles": false,
+        "exactFolders": false,
+        "allHashes": false
+      },
+      "callCount": 13,
+      "errorCode": "AppClosed",
+      "finderProcessAliveAfterError": true,
+      "completionLatencyMs": null,
+      "classification": "Incomplete; elapsed until refusal, not completion latency.",
+      "inputIsolation": "Foreground, Space and cursor changed during the run; cause not established.",
+      "allSixSourceHashesPreserved": true,
+      "rawDragFixed": false
+    }
+  },
+  "excluded": [
+    "An earlier native current attempt used an invalid recovery command and inter-turn coordination; preserved as controller-invalid.",
+    "A retry preflight had a local Python module alias collision before timing or task effects; corrected before the valid retry.",
+    "Reference browser setup failures had no task timer or task effects."
+  ],
+  "limits": [
+    "One valid sample per measured task; no reliability or general speedup claim.",
+    "Browser current uses fresh model contexts; native reference uses a persistent host-agent conversation.",
+    "Current native uses a deterministic UI controller; reference native includes host-agent orchestration and reasoning.",
+    "Different strategies and environment state; not a controlled driver or model comparison.",
+    "Startup/reset are excluded for native; browser timing includes fresh model/CLI initialization.",
+    "Dispatch acknowledgement alone is not completion; independent persisted-state and SHA-256 grades are required."
+  ],
+  "checks": {
+    "typescript": "passed",
+    "localFullSuite": {
+      "passed": 227,
+      "skipped": 3,
+      "failed": 0,
+      "reasonForSkips": "Two Linux-only cases on macOS and one CI-only native broker case."
+    },
+    "build": "JavaScript/native/CLI passed",
+    "nativeSmokes": [
+      "offscreen effects, scope guards and isolation passed",
+      "child window discovery passed"
+    ],
+    "hostedNativeHelper": "passed on measured production source commit",
+    "sharedDesktopCI": "See Actions runs on this branch; cold-start timeout follow-ups are test/CI-only."
+  },
+  "localEvidenceRoot": ".context/pushed-benchmark/",
+  "cleanup": "All owned browser/helper processes and owned web fixture stopped; user windows and benchmark file trees preserved."
+}
