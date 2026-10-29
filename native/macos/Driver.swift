@@ -67,6 +67,7 @@ struct SavedElement {
     var targetPID: pid_t = 0
     var targetLaunch: Date?
     var targetWindow: AXUIElement?
+    var targetIsFocusedSurface = false
     var captureFrame: CGRect?
     var captureGeneration = ""
 
@@ -102,6 +103,30 @@ struct SavedElement {
         if !AXIsProcessTrusted() { throw DriverFailure(code: "AccessibilityDenied", message: "Enable Accessibility for the app launching the driver in System Settings.") }
     }
 
+    /// Some applications host an inline editor in a real WindowServer surface
+    /// omitted from AXWindows. Observe that surface explicitly by its actual ID;
+    /// it never inherits capabilities from a containing application window.
+    func focusedSurface(_ pid: pid_t) -> (element: AXUIElement, id: CGWindowID)? {
+        let application = AXUIElementCreateApplication(pid)
+        guard let raw = value(application, "AXFocusedUIElement"), CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
+        let element = raw as! AXUIElement
+        var owner: pid_t = 0
+        guard AXUIElementGetPid(element, &owner) == .success, owner == pid,
+              ["AXTextField", "AXTextArea", "AXComboBox"].contains(string(element, "AXRole")),
+              string(element, "AXSubrole") != "AXSecureTextField",
+              (value(element, "AXFocused") as? Bool) == true,
+              (value(element, "AXEnabled") as? Bool) != false,
+              let id = backgroundInput.windowID(element),
+              let info = backgroundInput.windowInfo(id), info[kCGWindowOwnerPID as String] as? Int == Int(pid) else { return nil }
+        for relation in ["AXWindow", "AXTopLevelUIElement"] {
+            if let raw = value(element, relation) {
+                guard CFGetTypeID(raw) == AXUIElementGetTypeID(),
+                      backgroundInput.windowID(raw as! AXUIElement) == id else { return nil }
+            }
+        }
+        return (element, id)
+    }
+
     func snapshot(_ pid: pid_t, windowID: CGWindowID? = nil, nodeLimit: Int = 1000) throws -> [String: Any] {
         try requireAX()
         observationErrors = 0; trackingObservation = true
@@ -135,6 +160,8 @@ struct SavedElement {
             var owner: pid_t = 0
             guard AXUIElementGetPid(element, &owner) == .success, owner == pid,
                   string(element, "AXRole") == "AXWindow" else { return nil }
+            if let id = backgroundInput.windowID(element), let info = backgroundInput.windowInfo(id),
+               let serverOwner = info[kCGWindowOwnerPID as String] as? Int, serverOwner != Int(pid) { return nil }
             return element
         }
         var windowValue: CFTypeRef?
@@ -152,16 +179,29 @@ struct SavedElement {
         guard windowStatus == .success else {
             throw DriverFailure(code: "ObservationFailed", message: "Cannot read AXWindows (AX error \(windowStatus.rawValue)). Check the app is responsive and Accessibility is enabled for this launch identity.")
         }
-        let windows = windowValue as? [AXUIElement] ?? []
+        let windows = (windowValue as? [AXUIElement] ?? []).compactMap { validWindow($0) }
         // Some Electron apps expose a real focused window but an empty AXWindows array.
         let focused = validWindow(value(application, "AXFocusedWindow"))
         let main = validWindow(value(application, "AXMainWindow"))
-        let childWindow = (value(application, "AXChildren") as? [AXUIElement] ?? []).first { string($0, "AXRole") == "AXWindow" }
-        let alternatives = [focused, main, childWindow].compactMap { $0 } + windows
+        let childWindows = (value(application, "AXChildren") as? [AXUIElement] ?? []).compactMap { validWindow($0) }
+        let alternatives = [focused, main].compactMap { $0 } + windows + childWindows
         let selected = windowID.flatMap { id in alternatives.first { backgroundInput.windowID($0) == id } }
-        guard windowID == nil || selected != nil else { throw DriverFailure(code: "StaleTarget", message: "Requested window is no longer accessible. List windows again.") }
-        guard let window = selected ?? focused ?? main ?? windows.first ?? childWindow else { throw DriverFailure(code: "UnsupportedSurface", message: "App returned no accessible windows. Open a window in the selected app first.") }
+        let surface = focusedSurface(pid)
+        let explicitSurface = windowID.flatMap { id in surface.flatMap { $0.id == id ? $0.element : nil } }
+        guard windowID == nil || selected != nil || explicitSurface != nil else { throw DriverFailure(code: "StaleTarget", message: "Requested window is no longer accessible. List windows again.") }
+        guard let window = selected ?? explicitSurface ?? focused ?? main ?? windows.first ?? childWindows.first else { throw DriverFailure(code: "UnsupportedSurface", message: "App returned no accessible windows. Open a window in the selected app first.") }
         targetWindow = window
+        targetIsFocusedSurface = explicitSurface.map { CFEqual($0, window) } ?? false
+        // Inline editors can be exposed only through the application's focus
+        // attribute, outside AXChildren. Reserve traversal for this exact-window
+        // element before a large icon/document tree exhausts the node budget.
+        var focusedElement: AXUIElement?
+        if let raw = value(application, "AXFocusedUIElement"), CFGetTypeID(raw) == AXUIElementGetTypeID() {
+            let element = raw as! AXUIElement
+            var owner: pid_t = 0
+            if AXUIElementGetPid(element, &owner) == .success, owner == pid,
+               backgroundInput.belongs(element, to: window) { focusedElement = element }
+        }
         let deadline = Date().addingTimeInterval(6)
         var nodes: [[String: Any]] = []
         var truncated = false
@@ -183,6 +223,10 @@ struct SavedElement {
                     supported.append(attribute == "AXValue" ? "setValue" : "insertText")
                 }
             }
+            var selectable = DarwinBoolean(false)
+            if !secure && AXUIElementIsAttributeSettable(element, "AXSelected" as CFString, &selectable) == .success && selectable.boolValue {
+                supported.append("select")
+            }
             var focusable = DarwinBoolean(false)
             if !secure && AXUIElementIsAttributeSettable(element, "AXFocused" as CFString, &focusable) == .success && focusable.boolValue {
                 supported.append("focus")
@@ -190,13 +234,16 @@ struct SavedElement {
             refs[ref] = SavedElement(element: element, role: role, name: label)
             var node: [String: Any] = ["ref": ref, "role": role, "name": label,
                           "value": secure ? "[secure]" : string(element, "AXValue"),
-                          "focused": (value(element, "AXFocused") as? Bool) ?? false,
+                          "focused": focusedElement.map { CFEqual($0, element) } ?? ((value(element, "AXFocused") as? Bool) ?? false),
                           "enabled": (value(element, "AXEnabled") as? Bool) ?? true,
                           "actions": secure ? [] : supported, "depth": depth]
+            if let selected = value(element, "AXSelected") as? Bool { node["selected"] = selected }
             if let frame = windowFrame(element) {
                 node["frame"] = ["x": frame.minX, "y": frame.minY, "width": frame.width, "height": frame.height]
             }
+            if let focusedElement, CFEqual(focusedElement, element) { node["focusSource"] = "AXFocusedUIElement" }
             nodes.append(node)
+            if depth == 0, let focusedElement, !CFEqual(focusedElement, window) { walk(focusedElement, 1) }
             let children = value(element, "AXChildren") as? [AXUIElement] ?? []
             for child in children {
                 if nodes.count >= nodeLimit || Date() > deadline { truncated = true; break }
@@ -207,17 +254,26 @@ struct SavedElement {
         var result: [String: Any] = ["id": generation, "source": "ax", "pid": Int(pid),
                 "title": string(window, "AXTitle"), "nodes": nodes, "truncated": truncated || observationErrors > 0, "observationErrors": observationErrors,
                 "capturedAt": ISO8601DateFormatter().string(from: Date()),
-                "windowListed": windows.contains { CFEqual($0, window) }]
+                "windowListed": windows.contains { CFEqual($0, window) },
+                "focusedElementAvailable": focusedElement != nil]
         if let id = backgroundInput.windowID(window) {
             result["windowId"] = Int(id)
             if let onScreen = backgroundInput.isOnScreen(id) { result["windowOnScreen"] = onScreen }
         }
+        if let surface, backgroundInput.windowID(window) != surface.id {
+            result["focusedSurface"] = ["windowId": Int(surface.id), "pid": Int(pid), "role": string(surface.element, "AXRole"), "name": name(surface.element)]
+        }
+        if targetIsFocusedSurface { result["controlSurface"] = true }
         return result
     }
 
     /// Safari may omit application AXFocusedUIElement while in the background.
     /// In that case require exactly one leaf of the window's live focused AX tree.
     func keyboardReceiver(_ element: AXUIElement, window: AXUIElement) -> Bool {
+        if targetIsFocusedSurface {
+            guard CFEqual(element, window), let surface = focusedSurface(targetPID) else { return false }
+            return CFEqual(surface.element, element) && surface.id == backgroundInput.windowID(window)
+        }
         let application = AXUIElementCreateApplication(targetPID)
         guard let focusedWindow = value(application, "AXFocusedWindow"), CFEqual(focusedWindow, window),
               backgroundInput.belongs(element, to: window) else { return false }
@@ -252,6 +308,15 @@ struct SavedElement {
               let app = NSRunningApplication(processIdentifier: targetPID), !app.isTerminated,
               app.launchDate == targetLaunch else {
             throw DriverFailure(code: "StaleTarget", message: "Observe the target again before acting.")
+        }
+    }
+
+    func validateFocusedSurface() throws {
+        if targetIsFocusedSurface {
+            guard let window = targetWindow, let surface = focusedSurface(targetPID),
+                  CFEqual(surface.element, window), surface.id == backgroundInput.windowID(window) else {
+                throw DriverFailure(code: "StaleTarget", message: "Focused control surface changed. Observe the exact surface again.")
+            }
         }
     }
 
@@ -302,7 +367,7 @@ struct SavedElement {
     }
 
     func execute(_ request: [String: Any]) throws -> [String: Any] {
-        try requireAX(); try checkGeneration(request)
+        try requireAX(); try checkGeneration(request); try validateFocusedSurface()
         guard let action = request["action"] as? [String: Any], let kind = action["kind"] as? String else {
             throw DriverFailure(code: "InvalidRequest", message: "Missing action.")
         }
@@ -321,6 +386,26 @@ struct SavedElement {
             // Traversal sets 150 ms on this very AX object. Actions need their own budget.
             AXUIElementSetMessagingTimeout(element, 3)
             result = AXUIElementPerformAction(element, "AXPress" as CFString)
+        case "select":
+            let element = try target(action)
+            var writable = DarwinBoolean(false)
+            guard let window = targetWindow, backgroundInput.belongs(element, to: window),
+                  string(element, "AXRole") != "AXSecureTextField", string(element, "AXSubrole") != "AXSecureTextField",
+                  AXUIElementIsAttributeSettable(element, "AXSelected" as CFString, &writable) == .success, writable.boolValue else {
+                throw DriverFailure(code: "UnsupportedAction", message: "Control does not expose writable selection inside this window.")
+            }
+            AXUIElementSetMessagingTimeout(element, 3)
+            result = AXUIElementSetAttributeValue(element, "AXSelected" as CFString, kCFBooleanTrue)
+        case "confirm", "showMenu":
+            let element = try target(action)
+            let nativeAction = kind == "confirm" ? "AXConfirm" : "AXShowMenu"
+            guard let window = targetWindow, backgroundInput.belongs(element, to: window),
+                  string(element, "AXRole") != "AXSecureTextField", string(element, "AXSubrole") != "AXSecureTextField",
+                  actions(element).contains(nativeAction) else {
+                throw DriverFailure(code: "UnsupportedAction", message: "Control does not advertise \(nativeAction) inside this window.")
+            }
+            AXUIElementSetMessagingTimeout(element, 3)
+            result = AXUIElementPerformAction(element, nativeAction as CFString)
         case "focus":
             let element = try target(action)
             var writable = DarwinBoolean(false)
@@ -349,6 +434,7 @@ struct SavedElement {
             guard let window = targetWindow, let expectedID = backgroundInput.windowID(window),
                   backgroundInput.belongs(element, to: window),
                   (kind == "backgroundKey" || ["AXTextField", "AXTextArea", "AXComboBox"].contains(string(element, "AXRole"))),
+                  string(element, "AXRole") != "AXSecureTextField",
                   string(element, "AXSubrole") != "AXSecureTextField" else {
                 throw DriverFailure(code: "BackgroundUnavailable", message: "Background keyboard requires an exact non-protected editable control and window.")
             }
@@ -435,11 +521,7 @@ struct SavedElement {
             down.post(tap: .cghidEventTap); up.post(tap: .cghidEventTap)
             result = .success
         case "key":
-            let keys: [String: CGKeyCode] = ["Escape": 53, "Tab": 48, "Shift+Tab": 48,
-                "Enter": 36, "Space": 49, "ArrowLeft": 123, "ArrowRight": 124,
-                "ArrowDown": 125, "ArrowUp": 126, "Backspace": 51,
-                "Home": 115, "End": 119, "PageUp": 116, "PageDown": 121, "Meta+A": 0]
-            guard let key = action["text"] as? String, let code = keys[key], let window = targetWindow else {
+            guard let key = action["text"] as? String, let (code, flags) = BackgroundInput.keyChord(key), let window = targetWindow else {
                 throw DriverFailure(code: "UnsupportedAction", message: "Unsupported named key or missing window.")
             }
             let application = AXUIElementCreateApplication(targetPID)
@@ -460,7 +542,6 @@ struct SavedElement {
                   let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false) else {
                 throw DriverFailure(code: "UnsupportedAction", message: "Could not create keyboard events.")
             }
-            let flags: CGEventFlags = key == "Meta+A" ? .maskCommand : key == "Shift+Tab" ? .maskShift : []
             down.flags = flags; up.flags = flags
             down.postToPid(targetPID); up.postToPid(targetPID)
             result = .success
@@ -577,6 +658,7 @@ struct SavedElement {
     }
 
     func executeVisual(_ request: [String: Any]) async throws -> [String: Any] {
+        try validateFocusedSurface()
         try requireAX(); try checkGeneration(request)
         guard NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID else {
             throw DriverFailure(code: "UserActiveInTarget", message: "Visual background input yields while you use the target app.")
@@ -877,12 +959,19 @@ struct SavedElement {
             let app = AXUIElementCreateApplication(pid_t(pid))
             AXUIElementSetMessagingTimeout(app, 1.5)
             var candidates = value(app, "AXWindows") as? [AXUIElement] ?? []
+            candidates += value(app, "AXChildren") as? [AXUIElement] ?? []
             for attribute in ["AXFocusedWindow", "AXMainWindow"] {
                 if let raw = value(app, attribute), CFGetTypeID(raw) == AXUIElementGetTypeID() { candidates.append(raw as! AXUIElement) }
             }
             var ids = Set<CGWindowID>()
             return candidates.compactMap { window -> [String: Any]? in
-                guard let id = backgroundInput.windowID(window), ids.insert(id).inserted else { return nil }
+                var owner: pid_t = 0
+                guard AXUIElementGetPid(window, &owner) == .success, owner == pid_t(pid),
+                      string(window, "AXRole") == "AXWindow",
+                      let id = backgroundInput.windowID(window) else { return nil }
+                if let info = backgroundInput.windowInfo(id),
+                   let serverOwner = info[kCGWindowOwnerPID as String] as? Int, serverOwner != pid { return nil }
+                guard ids.insert(id).inserted else { return nil }
                 var item: [String: Any] = ["windowId": Int(id), "title": string(window, "AXTitle"), "minimized": (value(window, "AXMinimized") as? Bool) ?? false]
                 if let onScreen = backgroundInput.isOnScreen(id) { item["onScreen"] = onScreen }
                 return item

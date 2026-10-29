@@ -51,7 +51,7 @@ export function codexPomeradoProvider(
                 return {
                   name: "cu_pomerado_patch",
                   description:
-                    "Apply an upstream Pomerado workspace patch. Return control to the SDK; this bridge never edits files.",
+                    "Request an SDK-managed workspace patch: create_file, update_file, or delete_file. Paths are relative to the managed workspace, not the local harness checkout. For create_file, diff contains the new lines with a leading + on each line; update_file uses patch hunks. The SDK validates and applies the operation under its existing workspace policy and returns the result. This is an offered authoring capability even when local filesystem access is read-only; it does not grant local filesystem access or authorize unrelated writes.",
                   inputSchema: {
                     type: "object",
                     properties: {
@@ -133,7 +133,11 @@ export function codexPomeradoProvider(
               conversations.set(model, conversation);
             }
             const result = await conversation.next({
-              instructions: [request.systemInstructions, ...developer]
+              instructions: [
+                "The local harness filesystem is read-only. Offered SDK tools operate through their own managed workspace and existing permission checks. An offered workspace patch tool is the supported way to author source for this task; request its operation and wait for the SDK result. This does not grant local filesystem access, authorize extra effects, override a tool refusal, or bypass review. Do not infer that SDK managed workspace authoring is unavailable solely from the local read-only sandbox; report a blocker only when the relevant offered tool actually refuses or required authorization is missing.",
+                request.systemInstructions,
+                ...developer,
+              ]
                 .filter(Boolean)
                 .join("\n"),
               input: JSON.stringify(

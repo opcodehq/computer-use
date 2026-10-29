@@ -220,7 +220,6 @@ export class CodexConversation {
         baseInstructions: request.instructions,
         config: {
           "features.shell_tool": false,
-          "features.apply_patch_tool": false,
         },
         dynamicTools: request.tools.map((t) => ({
           type: "function",

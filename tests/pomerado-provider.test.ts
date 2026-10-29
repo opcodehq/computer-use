@@ -86,3 +86,28 @@ test("unsupported API prewarming and imported compaction fail before starting a 
   assert.equal(started, 0);
   provider.close();
 });
+test('managed authoring explains SDK workspace permissions without granting local filesystem access', async()=>{
+ let captured:any;
+ const provider=codexPomeradoProvider(undefined,()=>({close(){},async next(request){captured=request;return {type:'message',text:'done'};}}));
+ try{
+  await provider.getModel('fixture-model').getResponse({systemInstructions:'Use the offered workspace.',input:[],tools:[{type:'apply_patch',name:'apply_patch'}],modelSettings:{}});
+  assert.match(captured.instructions,/local.*read-only/i);
+  assert.match(captured.instructions,/SDK.*managed workspace/i);
+  assert.match(captured.instructions,/does not grant.*local filesystem/i);
+  assert.match(captured.tools[0].description,/create_file.*update_file.*delete_file/s);
+  assert.match(captured.tools[0].description,/relative.*workspace/i);
+  assert.match(captured.tools[0].description,/leading \+/);
+ }finally{provider.close();}
+});
+test('managed authoring guidance preserves absent and disallowed tool boundaries', async()=>{
+ let captured:any,started=0;
+ const provider=codexPomeradoProvider(undefined,()=>{started++;return {close(){},async next(request){captured=request;return {type:'message',text:'done'};}};});
+ try{
+ const model=provider.getModel('fixture-model');
+ await assert.rejects(model.getResponse({input:[],tools:[{type:'shell'}],modelSettings:{}}),/only SDK function tools/);
+ assert.equal(started,0);
+ await model.getResponse({input:[],tools:[{type:'apply_patch',name:'apply_patch'}],modelSettings:{toolChoice:'none'}});
+ assert.deepEqual(captured.allowedTools,[]);
+ assert.match(captured.instructions,/override a tool refusal/);
+ }finally{provider.close();}
+});

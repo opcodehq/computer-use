@@ -20,7 +20,7 @@ export function validateCandidate(candidate: Candidate, snapshot: Snapshot, hasI
     return;
   }
   const node = snapshot.nodes.find(node => node.ref === action.ref);
-  if (!node || !node.enabled || node.value === '[secure]') return reject('The target is missing, disabled, or protected.');
+  if (!node || !node.enabled || node.value === '[secure]' || node.role === 'AXSecureTextField') return reject('The target is missing, disabled, or protected.');
   if (action.kind === 'visualClick') {
     if (!['ax','visual'].includes(snapshot.source) || !snapshot.visual || !node.visualSource || !node.actions.includes('visualClick') ||
         !node.ref.startsWith(`${snapshot.id}:visual:`) || !node.frame || !Number.isFinite(node.detectionConfidence) || node.detectionConfidence! < 0.35) reject('Visual click requires a detected region from this capture.');
@@ -30,9 +30,9 @@ export function validateCandidate(candidate: Candidate, snapshot: Snapshot, hasI
     if (!['ax','visual'].includes(snapshot.source) || !node.focused || ![...['Tab','Shift+Tab','Option+Tab','Option+Shift+Tab','ArrowDown','ArrowUp','Enter','Escape','Space'], ...(snapshot.source === 'visual' ? ['Control+L','Control+T'] : [])].includes(action.text ?? '')) reject('Keyboard navigation requires the observed focused control and a supported key.');
     return;
   }
-  const capability = action.kind === 'press' ? 'AXPress' : action.kind;
-  if (!['press', 'focus', 'setValue', 'insertText'].includes(action.kind) || !node.actions.includes(capability)) reject('The target does not support this action.');
-  if (!['press','focus'].includes(action.kind) && action.text === undefined) reject('Text action requires explicit text.');
+  const capability = action.kind === 'press' ? 'AXPress' : action.kind === 'confirm' ? 'AXConfirm' : action.kind === 'showMenu' ? 'AXShowMenu' : action.kind;
+  if (!['press', 'confirm', 'select', 'showMenu', 'focus', 'setValue', 'insertText'].includes(action.kind) || !node.actions.includes(capability)) reject('The target does not support this action.');
+  if (!['press','confirm','select','showMenu','focus'].includes(action.kind) && action.text === undefined) reject('Text action requires explicit text.');
 }
 
 /** Revokes dispatch synchronously, before asynchronous fiber cleanup. */

@@ -64,7 +64,6 @@ const args = [
   "-c",
   "features.shell_tool=false",
   "-c",
-  "features.apply_patch_tool=false",
   "-c",
   "mcp_servers.cu.command=" + JSON.stringify(process.execPath),
   "-c",

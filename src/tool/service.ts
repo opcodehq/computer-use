@@ -9,6 +9,7 @@ import { SnapshotSchema, type Snapshot, type Candidate, type Event } from '../sh
 import { pressCandidates, textCandidates } from './candidates.js';
 import { decisionState } from './decision-state.js';
 import { validateCandidate } from '../main/policy.js';
+import { isNativeKeyChord } from './keyboard.js';
 
 export type ActInput = { app: string; instruction: string; operation?: 'press' | 'focus' | 'setValue' | 'insertText'; text?: string; dryRun?: boolean };
 export type Selector = (instruction: string, snapshot: Snapshot, candidates: Candidate[], signal?: AbortSignal, history?: string[]) => Promise<{ choice: string; confidence: number; probabilities?: Record<string, number> }>;
@@ -88,7 +89,7 @@ export class DesktopTool {
         windowId: Schema.optional(Schema.Number), nodeLimit: Schema.optional(Schema.Number),
         visual: Schema.optional(Schema.Boolean), modelPath: Schema.optional(Schema.String), overlay: Schema.optional(Schema.Boolean),
         app: Schema.String, instruction: Schema.optional(Schema.String),
-        operation: Schema.optional(Schema.Literals(['press', 'focus', 'setValue', 'insertText'])),
+        operation: Schema.optional(Schema.Literals(['press', 'focus', 'setValue', 'insertText', 'confirm', 'select', 'showMenu'])),
         key: Schema.optional(Schema.String), snapshotId: Schema.optional(Schema.String), ref: Schema.optional(Schema.String),
         animate: Schema.optional(Schema.Boolean), text: Schema.optional(Schema.String), dryRun: Schema.optional(Schema.Boolean),
       }))(input);
@@ -125,12 +126,12 @@ export class DesktopTool {
         catch { signal?.throwIfAborted(); observationError = 'Accessibility refresh failed. Retry observation or inspect windows before selecting another action.'; }
         const actions = (snapshot?.nodes ?? []).filter(node => node.enabled && node.value !== '[secure]' &&
           node.role !== 'AXSecureTextField').flatMap(node =>
-          ['AXPress', 'setValue', 'insertText'].filter(action => node.actions.includes(action)).map(action =>
-            ({ ref: node.ref, operation: action === 'AXPress' ? 'press' : action })));
+          ['AXPress', 'AXConfirm', 'AXShowMenu', 'select', 'setValue', 'insertText'].filter(action => node.actions.includes(action)).map(action =>
+            ({ ref: node.ref, operation: action === 'AXPress' ? 'press' : action === 'AXConfirm' ? 'confirm' : action === 'AXShowMenu' ? 'showMenu' : action })));
         this.remember({ event: 'action', outcome: 'pointerUnavailable', delivery: 'notDispatched' });
         return {
           status: 'recoveryRequired', dispatched: false, code: 'WindowOffScreen', delivery: 'notDispatched',
-          message: 'This pointer action requires a window on the current desktop. Accessibility actions may still work on this window.',
+          message: 'This window-directed pointer route is unavailable for the target. No input was sent; supported Accessibility actions may still work.',
           recovery: { route: 'accessibility', actions,
             next: 'Continue the same goal using a matching fresh Accessibility control and execute, then verify the result. These are available operations, not equivalent replacements for the failed gesture. Supply exact text for text operations. Ask to move the window only if the required interaction has no supported semantic route. Do not activate the app or switch Spaces automatically.' },
           ...(snapshot ? { snapshot } : {}), ...(observationError ? { observationError } : {}), timingMs: timings(),
@@ -189,14 +190,14 @@ export class DesktopTool {
 
       if (name === 'act' && (!args.instruction?.trim() || args.instruction.length > 4000)) throw new Error('Provide an instruction of 1–4000 characters.');
       const operation = args.operation ?? 'press';
-      if (!['press','focus'].includes(operation) && args.text === undefined) throw new Error('Text operations require exact caller-supplied text.');
-      if (name !== 'type' && operation === 'press' && args.text !== undefined) throw new Error('Use setValue or insertText with text.');
-      const namedKeys = ['Escape','Tab','Shift+Tab','Option+Tab','Option+Shift+Tab','Enter','Space','ArrowLeft','ArrowRight','ArrowDown','ArrowUp','Backspace','Home','End','PageUp','PageDown','Meta+A'];
-      if (name === 'key' && !namedKeys.includes(args.key ?? '')) throw new Error('Unsupported named key.');
+      if (['confirm','select','showMenu'].includes(operation) && name !== 'execute') throw new Error('This operation requires an exact observed ref through execute.');
+      if (!['press','focus','confirm','select','showMenu'].includes(operation) && args.text === undefined) throw new Error('Text operations require exact caller-supplied text.');
+      if (name !== 'type' && ['press','confirm','select','showMenu'].includes(operation) && args.text !== undefined) throw new Error('Use setValue or insertText with text.');
+      if (name === 'key' && !isNativeKeyChord(args.key)) throw new Error('Unsupported named key.');
       const clicked = name === 'click' ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.role !== 'AXSecureTextField' && (node.frame || (this.interactionMode === 'background' && node.actions.includes('AXPress'))) && node.actions.length > 0) : undefined;
       if (name === 'click' && !clicked) throw new Error('Click requires a visible actionable ref from the latest snapshot.');
       const keyboardTarget = ['key', 'type'].includes(name) && (name === 'type' || this.interactionMode === 'background')
-        ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.focused && (name === 'key' ? node.role !== 'AXWindow' && node.actions.length > 0 : ['AXTextField','AXTextArea','AXComboBox', ...(before.source === 'visual' ? ['VisualKeyboard'] : [])].includes(node.role))) : undefined;
+        ? before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.role !== 'AXSecureTextField' && node.focused && (name === 'key' ? node.role !== 'AXWindow' : ['AXTextField','AXTextArea','AXComboBox', ...(before.source === 'visual' ? ['VisualKeyboard'] : [])].includes(node.role))) : undefined;
       if ((name === 'type' || (name === 'key' && this.interactionMode === 'background')) && !keyboardTarget) throw new Error('Background keyboard requires a fresh focused control; text input requires an editable field. Focus and observe first.');
       if (name === 'type' && (!args.text || args.text.length > 8000)) throw new Error('Supply 1–8000 characters of exact text.');
       let candidates: Candidate[];
@@ -208,7 +209,7 @@ export class DesktopTool {
         candidates = [{ id: 'key', description: `Press ${args.key} in the observed window`, action: { kind: 'key', text: args.key } }];
       } else if (name === 'execute') {
         // Exact execution uses advertised native capabilities, not Jev candidate heuristics.
-        const node = before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.actions.includes(operation === 'press' ? 'AXPress' : operation));
+        const node = before.nodes.find(node => node.ref === args.ref && node.enabled && node.value !== '[secure]' && node.role !== 'AXSecureTextField' && node.actions.includes(operation === 'press' ? 'AXPress' : operation === 'confirm' ? 'AXConfirm' : operation === 'showMenu' ? 'AXShowMenu' : operation));
         if (!node) throw new Error('Ref does not support the requested operation in this snapshot.');
         candidates = [{ id: 'exact', description: `${node.role}: ${node.name}`, action: { kind: operation, ref: node.ref, ...(args.text === undefined ? {} : { text: args.text }) } }];
       } else {

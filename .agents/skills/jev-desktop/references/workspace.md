@@ -31,10 +31,19 @@ response explicitly reports `acceptedByApp: unverified`. This route does not
 support background keyboard/scroll. Use the browser protocol route for Chromium
 background work. Do not retry an unverified action without inspecting the result.
 
-Mac ref-based gestures use the owning process/window event transport and never
-fall back to global input. Off-screen, foreground-user-active, ambiguous, or
-protected targets refuse. These new Mac gestures are implemented but **not yet
-validated on a Mac**. They do not establish universal background-app support.
+Mac ref-based gestures use PID-scoped events and coordinates local to the exact
+owning window, including off-screen windows when live ownership and geometry
+can be verified. Advertised semantic `AXPress` remains preferred when it achieves
+the goal. Verified effects include an off-screen standard native button callback
+with an AX state change, and an owned Finder window on an inactive normal Space:
+a window-local right-click exposed an enabled New Folder command, then semantic
+press created the folder on disk. The foreground app, hardware cursor, and active
+Space stayed unchanged. Applications can ignore these events; inspect fresh state to verify
+the requested effect. Foreground-user-active, ambiguous, protected, or unsupported
+states still refuse. There is no global-input, activation, Space-switch, or cursor
+fallback. This evidence does not establish minimized-window support or every
+application workflow. The separate physical desktop broker keeps its existing
+scope and permissions.
 
 ## Browser tools
 
@@ -60,6 +69,7 @@ profile attachment or guessing a native browser window from its title.
 | click / doubleClick / rightClick / hover | pageId, snapshotId, ref |
 | drag | pageId, snapshotId, ref, targetRef |
 | fill | pageId, snapshotId, ref, text |
+| fillForm | pageId, snapshotId, fields: 1–40 entries `{ref,text}` or `{ref,value}` |
 | key | pageId, snapshotId, ref, key, e.g. Control+A |
 | scroll | pageId, snapshotId, ref, amount in pixels |
 | select | pageId, snapshotId, ref, value |
@@ -68,6 +78,33 @@ profile attachment or guessing a native browser window from its title.
 | dialog | pageId, dialogId, accept boolean; optional prompt text |
 | downloads | None |
 | download | pageId, downloadId, outputPath |
+
+Observations name controls from `aria-labelledby`, `aria-label`, associated HTML
+labels (wrapped or `for`), and control-specific fallbacks. Select nodes expose the
+current `value` and `options` with values, labels, selection, and enabled state.
+
+Browser mutations consume their input snapshot refs. Successful actions normally
+return a fresh top-level `snapshotId`, `pageId`, and `nodes`, matching `observe`.
+Use those fresh refs for the next action instead of issuing a redundant observe.
+A dialog or closed page may have no snapshot. If `observationError` is returned,
+the action was dispatched: observe again without replaying the mutation. A fresh
+observation helps verify the result; dispatch status alone does not prove success.
+
+Use `fillForm` to edit several controls from one snapshot in one tool call:
+
+```sh
+cu browser --session work --input-json '{"operation":"fillForm","pageId":"PAGE","snapshotId":"SNAPSHOT","fields":[{"ref":"CUSTOMER_REF","text":"Harbor"},{"ref":"PRIORITY_REF","value":"high"}]}'
+```
+
+Each entry has exactly one `text` or `value` string (up to 16000 characters).
+`text` fills an editable input/textarea; `value` selects an available option by
+its exact value. Password and non-text input controls are excluded from this
+batch operation. All refs and options are validated before dispatch. Fields are
+then applied in order to the exact observed elements; navigation or a changed
+control stops the batch. `partiallyDispatched` includes `completedFields` and an
+error. Inspect the returned state before deciding what remains; never replay the
+whole batch after partial or uncertain delivery. Batch filling does not submit
+a form automatically, though application field handlers may have side effects.
 
 Frames include cross-origin frames. File inputs can be assigned without opening
 an OS file picker. Downloads are saved to the exact caller-specified path with

@@ -52,6 +52,7 @@ const operations = [
   "hover",
   "drag",
   "fill",
+  "fillForm",
   "insertText",
   "key",
   "scroll",
@@ -99,6 +100,7 @@ export class BrowserTools {
   private lazyRefs = new Map<string, { pool: JSHandle; index: number; page: Page; frame: Frame; url: string }>();
   private pools: JSHandle[] = [];
   private snapshotId = "";
+  private navigationVersion = 0;
   private observedPage?: Page;
   private active?: Page;
   private title = "";
@@ -131,6 +133,7 @@ export class BrowserTools {
       this.invalidate();
     };
     const onNavigate = () => {
+      this.navigationVersion++;
       if (this.observedPage === page) this.invalidate();
     };
     const onDialog = (dialog: Dialog) => {
@@ -189,7 +192,18 @@ export class BrowserTools {
     return b;
   }
   private async snapshot(page: Page, frameId?: unknown, options: { query?: string; nodeLimit?: number; includeText?: boolean } = {}) {
+    for (let attempt = 0; ; attempt++) {
+      try { return await this.snapshotOnce(page, frameId, options); }
+      catch (error) {
+        this.invalidate();
+        if (attempt >= 2 || page.isClosed() || !/Execution context was destroyed|Cannot find context|navigation|Frame was detached/i.test(String(error))) throw error;
+        await page.waitForLoadState('domcontentloaded', {timeout:1500}).catch(() => {});
+      }
+    }
+  }
+  private async snapshotOnce(page: Page, frameId?: unknown, options: { query?: string; nodeLimit?: number; includeText?: boolean } = {}) {
     const started = performance.now();
+    const navigationVersion = this.navigationVersion;
     this.invalidate();
     this.observedPage = page;
     this.active = page;
@@ -210,16 +224,27 @@ export class BrowserTools {
       const pool = await frame!.evaluateHandle(({ limit, query }: { limit: number; query?: string }) => {
         const selector = 'button,a,input,textarea,select,[role="button"],[contenteditable="true"],h1,h2,h3,p,td,th,summary,[role="cell"],[role="checkbox"],[role="radio"],[role="combobox"],[role="option"],[role="menuitem"],[role="tab"],[role="switch"],[role="status"],[role="alert"]';
         const all = Array.from(document.querySelectorAll(selector));
-        const candidates = query ? all.filter(el => (el.getAttribute('aria-label') ?? el.getAttribute('placeholder') ?? el.textContent ?? '').includes(query)) : all;
+        const nameOf = (el: Element) => {
+          const labelled = (el.getAttribute('aria-labelledby') ?? '').split(/\s+/).filter(Boolean).map(id => document.getElementById(id)?.textContent ?? '').join(' ').trim();
+          const labels = 'labels' in el ? Array.from((el as HTMLInputElement).labels ?? []).map(label => {
+            const clone = label.cloneNode(true) as Element;
+            clone.querySelectorAll('input,select,textarea,button').forEach(control => control.remove());
+            return clone.textContent ?? '';
+          }).join(' ').trim() : '';
+          const buttonValue = el instanceof HTMLInputElement && ['button','submit','reset'].includes(el.type) ? el.value : '';
+          return (labelled || el.getAttribute('aria-label') || labels || el.getAttribute('alt') || buttonValue || el.getAttribute('placeholder') || el.textContent || el.getAttribute('title') || '').replace(/\s+/g, ' ').trim().slice(0,1500);
+        };
+        const candidates = query ? all.filter(el => nameOf(el).includes(query)) : all;
         const elements = candidates.slice(0, limit);
         const nodes = elements.map(el => {
           const input = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
           const secure = el instanceof HTMLInputElement && el.type === 'password';
           const rect = el.getBoundingClientRect();
           return { role: el.getAttribute('role') ?? el.tagName.toLowerCase(),
-            name: (el.getAttribute('aria-label') ?? el.getAttribute('placeholder') ?? el.textContent ?? '').slice(0, 1500),
-            value: secure ? '[secure]' : input ? el.value.slice(0, 2000) : (el.textContent ?? '').trim().slice(0, 2000), secure,
+            name: nameOf(el),
+            value: secure ? '[secure]' : input || el instanceof HTMLSelectElement ? el.value.slice(0, 2000) : (el.textContent ?? '').trim().slice(0, 2000), secure,
             visible: rect.width > 0 && rect.height > 0 && el.checkVisibility({opacityProperty:true,visibilityProperty:true}), type: el.getAttribute('type'),
+            options: el instanceof HTMLSelectElement ? Array.from(el.options).map(option => ({value:option.value,label:option.label,selected:option.selected,enabled:!option.disabled})) : undefined,
             enabled: !el.matches(':disabled') && el.getAttribute('aria-disabled') !== 'true',
             bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
         });
@@ -234,8 +259,10 @@ export class BrowserTools {
         nodes.push({ ref, frameId: fid, ...dataNode });
       }
     }
-    this.snapshotId = id;
     this.title = await page.title();
+    const text = options.includeText === false ? undefined : (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).slice(0, 24000);
+    if (navigationVersion !== this.navigationVersion) throw new Error('Page navigation changed during observation.');
+    this.snapshotId = id;
     return {
       snapshotId: id,
       pageId: this.pageId(page),
@@ -245,7 +272,7 @@ export class BrowserTools {
       truncated,
       dialogs: this.dialogList(),
       downloads: this.downloadList(),
-      text: options.includeText === false ? undefined : (await page.locator("body").innerText({ timeout: 5000 }).catch(() => "")).slice(0, 24000),
+      text,
       scope: options.query ? { query: options.query } : undefined,
       timingMs: { observation: performance.now() - started },
       deliveryMode: "browser-protocol-background",
@@ -484,7 +511,46 @@ export class BrowserTools {
     if (attachedMac && ['key','insertText','doubleClick','rightClick','hover','drag'].includes(operation))
       throw new Error('This attached Mac gesture would require focus-sensitive browser input. Use a native semantic control or an isolated browser. No event sent.');
     let action: () => Promise<unknown>;
-    if (operation === "navigate") {
+    let completedFields: number | undefined;
+    let batchError: string | undefined;
+    if (operation === "fillForm") {
+      if (!Array.isArray(input.fields) || input.fields.length < 1 || input.fields.length > 40) throw new Error('Supply 1–40 fields.');
+      const seen = new Set<string>();
+      const entries: Array<{binding: Binding; text?: string; value?: string}> = [];
+      for (const field of input.fields) {
+        if (!field || typeof field !== 'object' || Array.isArray(field)) throw new Error('Invalid field.');
+        const item = field as Record<string, unknown>;
+        const ref = required(item, 'ref');
+        if (seen.has(ref)) throw new Error('Duplicate form ref.');
+        seen.add(ref);
+        const text = item.text, value = item.value;
+        if ((typeof text === 'string') === (typeof value === 'string') || (typeof text === 'string' && text.length > 16000) || (typeof value === 'string' && value.length > 16000)) throw new Error('Each field requires exactly one text or value string up to 16000 characters.');
+        const binding = await this.binding({...input, ref}, page);
+        await binding.element.evaluate((el, select) => {
+          if (select ? !(el instanceof HTMLSelectElement) || el.disabled : !((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !el.disabled && !el.readOnly && !(el instanceof HTMLInputElement && ['password','file','checkbox','radio','submit','button','reset','hidden'].includes(el.type)))) throw new Error('Unsupported form control.');
+        }, typeof value === 'string');
+        if (typeof value === 'string' && !(await binding.element.evaluate((el,value) => Array.from((el as HTMLSelectElement).options).some(option => option.value === value && !option.disabled && !(option.parentElement instanceof HTMLOptGroupElement && option.parentElement.disabled)),value))) throw new Error('Select option is unavailable.');
+        entries.push({binding,text:text as string|undefined,value:value as string|undefined});
+      }
+      action = async () => {
+        completedFields = 0;
+        for (const entry of entries) {
+          try {
+            signal?.throwIfAborted();
+            if (entry.binding.frame.isDetached() || entry.binding.frame.url() !== entry.binding.url || !(await entry.binding.element.evaluate((el, select) => el.isConnected && (select ? el instanceof HTMLSelectElement && !el.disabled : (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && !el.disabled && !el.readOnly && !(el instanceof HTMLInputElement && ['password','file','checkbox','radio','submit','button','reset','hidden'].includes(el.type))), entry.value !== undefined))) throw new Error('Form changed during batch. Observe before continuing.');
+            if (entry.value !== undefined) await entry.binding.element.selectOption(entry.value);
+            else if (attachedMac) await entry.binding.element.evaluate((el, text) => {
+              const target = el as HTMLInputElement | HTMLTextAreaElement;
+              const prototype = el instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+              Object.getOwnPropertyDescriptor(prototype,'value')!.set!.call(target,text);
+              target.dispatchEvent(new Event('input',{bubbles:true})); target.dispatchEvent(new Event('change',{bubbles:true}));
+            },entry.text!);
+            else await entry.binding.element.fill(entry.text!);
+            completedFields++;
+          } catch (error) { batchError = String(error); break; }
+        }
+      };
+    } else if (operation === "navigate") {
       const destination = url(required(input, "url"));
       action = () =>
         page.goto(destination, {
@@ -622,13 +688,26 @@ export class BrowserTools {
         return { status: "dialogPending", dialogs: this.dialogList() };
       }
       signal?.throwIfAborted();
+      let observation: Record<string, unknown> = {};
+      if (!page.isClosed()) {
+        try {
+          await page.waitForLoadState('domcontentloaded', {timeout:1500}).catch(() => {});
+          observation = await this.snapshot(page);
+        } catch (error) {
+          observation = {observationError:String(error), next:'Action dispatched; observe again to verify. Do not replay the action.'};
+        }
+      }
+      signal?.throwIfAborted();
       return {
-        status: "dispatchedUnverified",
+        ...observation,
+        status: batchError ? "partiallyDispatched" : "dispatchedUnverified",
+        completedFields,
+        error: batchError,
         inputRoute: attachedMac ? "dom-event-untrusted" : "browser-protocol",
         pageId: this.pageId(page),
         dialogs: this.dialogList(),
         downloads: this.downloadList(),
-        next: "Observe the page to verify the result.",
+        next: observation.snapshotId ? "Use the fresh snapshot refs for the next action; inspect the observed state to verify the result." : "Observe the page to verify the result. Do not replay the action.",
       };
     } catch (error) {
       throw Object.assign(

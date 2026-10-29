@@ -42,12 +42,30 @@ Additional structured commands:
 | `act` | `app`, `instruction`, optional `operation`, exact `text`, `candidateRefs`, `snapshotId` |
 | `execute` | `app`, `snapshotId`, `ref`, advertised `operation`, exact `text` if required |
 | `type` | `app`, `snapshotId`, focused editable `ref`, exact `text` |
-| `key` | `app`, `snapshotId`, focused editable `ref`, named `key`, e.g. `Enter` |
-| `click` | `app`, `snapshotId`, current `ref`; experimental background pointer route |
+| `key` | `app`, `snapshotId`, focused nonsecure control `ref`, named key or command chord, e.g. `Enter` or `Meta+Shift+N` |
+| `click` | `app`, `snapshotId`, current `ref`; semantic AXPress or exact window-local background pointer delivery |
 | `wait` | `app`, `waitText`, `outputOnly:true`, optional `timeoutMs`, `match` |
+
+Native `key` accepts unique modifiers `Meta`, `Control`, `Alt` (or `Option`),
+and `Shift`, joined with `+` followed by a base key. Named base keys are `Enter`,
+`Tab`, `Escape`, `Space`, `Backspace`, `Delete`, `ArrowLeft`, `ArrowRight`,
+`ArrowDown`, `ArrowUp`, `Home`, `End`, `PageUp`, and `PageDown`. Uppercase letters
+`A`–`Z` and digits `0`–`9` require `Meta`, `Control`, or `Alt`/`Option`;
+`Shift+A` alone is rejected. Duplicate modifiers, including `Alt+Option`, are
+rejected. Examples: `Meta+Shift+N`, `Meta+C`, `Meta+Alt+V`, and `Shift+Tab`.
+Background keys require an exact fresh focused nonsecure control. Navigation can
+use focused containers; text entry still requires an editable field. Command
+chords can change files or submit actions: the caller must authorize the effect.
 
 Use `expectedOutput` on actions or `wait` with `outputOnly:true` for terminal
 verification. Preexisting output and editable-field echoes do not prove execution.
+
+Mac native background pointer delivery can address off-screen windows using exact
+PID/window ownership and local geometry. Prefer advertised AXPress for equivalent
+semantic activation. Apps can ignore input, so verify the resulting state.
+Unsupported, protected, or ambiguous states fail closed. No activation, Space
+switch, global-input, or hardware-cursor fallback is permitted. This is not a
+claim of minimized-window or universal application compatibility.
 
 ## Visual ambiguity
 
@@ -87,3 +105,22 @@ helper entirely. Mac helper and MCP sessions include a local preview by default;
 Exact CLI actions accept `--snapshot-id`, `--ref`, `--operation`, `--text`, and
 `--key` directly. `--input-json` remains available for richer arguments. These
 commands use the host agent's decisions and make no model API calls.
+
+For an observed native field advertising `AXConfirm`, use exact `execute` with
+`operation: "setValue"` and the caller-supplied value, then use the returned fresh
+field ref with `operation: "confirm"` to commit. A changed field value alone does
+not prove a rename persisted. Confirm sends only the advertised `AXConfirm`; it
+does not fall back to keyboard input or replay an uncertain action.
+
+If an observation advertises `focusedSurface`, that editor belongs to its own
+native window scope. Observe its exact `windowId` explicitly before acting; refs
+from the parent window do not authorize input to the separate surface. CU checks
+that the same nonsecure editor still owns focus before each dispatch.
+Use exact `execute` with `operation: "select"` only when the target advertises
+`select`; this sets the native selection attribute without pointer input.
+
+For a control advertising `AXShowMenu`, exact `execute` with `operation: "showMenu"`
+opens its native context menu without pointer input. Inspect a fresh observation
+before choosing a menu item. A successful dispatch alone does not establish the
+menu's target or task completion. If the menu is absent or ambiguous, stop and
+observe; never substitute a global click or replay an uncertain write.

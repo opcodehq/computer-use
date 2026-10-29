@@ -70,10 +70,12 @@ active sessions before `cu helper-restart`. A displayed guide is not proof of a 
 
 Preserve the user's work: background input must not activate apps, switch Spaces,
 move the hardware cursor, or bypass `UserActiveInTarget`.
-`WindowOffScreen` blocks pointer delivery only. Use the fresh recovery snapshot
-to continue through supported Accessibility actions; see
-[recovery.md](references/recovery.md). Request window movement only when the
-required operation has no usable semantic route.
+The native Accessibility route supports PID-scoped, window-local pointer input
+on off-screen windows when exact ownership and geometry can be verified.
+Prefer advertised semantic `AXPress` when it achieves the goal. Applications may
+ignore background events; verify the effect. Unsupported or ambiguous states
+still refuse; see [recovery.md](references/recovery.md). This does not establish
+support for minimized windows or every application workflow.
 Avoid concurrent control of the same app. An unknown-delivery error means the
 last action may have happened; observe before deciding whether to retry.
 Capture only to resolve a real visual ambiguity unless the user requested ongoing

@@ -103,6 +103,44 @@ test('named keyboard actions require fresh state and reject arbitrary key string
   assert.deepEqual(sent[0]!.args?.action, { kind: 'key', text: 'Escape' });
 });
 
+test('background command chords and Escape use a fresh focused container without text capability', async () => {
+  const sent: Record<string, unknown>[] = [];
+  const state = { ...snapshot, nodes: [{ ...snapshot.nodes[0]!, role: 'AXOutline', name: 'Owned files', focused: true, actions: [] as string[] }] };
+  const tool = new DesktopTool(async (method, args) => {
+    if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+    if (method === 'snapshot') return state;
+    if (method === 'execute') sent.push(args!.action as Record<string, unknown>);
+    return {};
+  }, async () => { throw new Error('No model required'); });
+  for (const key of ['Meta+Shift+N', 'Meta+C', 'Meta+Alt+V', 'Escape']) {
+    await tool.call('observe', { app: 'Calculator' });
+    await tool.call('key', { app: 'Calculator', snapshotId: 's1', ref: 's1:0', key });
+  }
+  assert.deepEqual(sent.map(action => [action.kind, action.text]), [
+    ['backgroundKey', 'Meta+Shift+N'], ['backgroundKey', 'Meta+C'], ['backgroundKey', 'Meta+Alt+V'], ['backgroundKey', 'Escape'],
+  ]);
+  await assert.rejects(tool.call('type', { app: 'Calculator', snapshotId: 's1', ref: 's1:0', text: 'Never type into a container' }), /editable field/);
+  for (const key of ['Shift+A', 'A', 'Meta++N', 'Meta+Meta+N', 'Alt+Option+V', 'Meta+arbitrary text']) {
+    await tool.call('observe', { app: 'Calculator' });
+    await assert.rejects(tool.call('key', { app: 'Calculator', snapshotId: 's1', ref: 's1:0', key }), /Unsupported named key/);
+  }
+  assert.equal(sent.length, 4);
+});
+
+test('background keys never target a secure focused field or a stale ref', async () => {
+  let dispatched = 0;
+  const tool = new DesktopTool(async method => {
+    if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+    if (method === 'snapshot') return { ...snapshot, nodes: [{ ...snapshot.nodes[0]!, role: 'AXSecureTextField', value: '[secure]', focused: true }] };
+    if (method === 'execute') dispatched++;
+    return {};
+  }, async () => { throw new Error('No model required'); });
+  await tool.call('observe', { app: 'Calculator' });
+  await assert.rejects(tool.call('key', { app: 'Calculator', snapshotId: 's1', ref: 's1:0', key: 'Escape' }), /focused control/);
+  await assert.rejects(tool.call('key', { app: 'Calculator', snapshotId: 'old', ref: 's1:0', key: 'Escape' }), /Stale snapshot/);
+  assert.equal(dispatched, 0);
+});
+
 test('pointer fallback requires observed bounds and never calls Jev', async () => {
   const calls: string[] = [];
   const tool = new DesktopTool(async method => {
@@ -375,4 +413,97 @@ test('off-screen AXPress click recovers semantically while visible pointer fallb
     await tool.call('click', { app: 'Calculator', snapshotId: 's1', ref: 's1:0' });
     assert.equal(kind, windowOnScreen ? 'backgroundClick' : 'press');
   }
+});
+
+test('exact confirm commits only an advertised nonprotected control', async () => {
+  for (const [supported, protectedField] of [[true,false], [false,false], [true,true]]) {
+    const sent: unknown[] = [];
+    const tool = new DesktopTool(async (method, args) => {
+      if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+      if (method === 'snapshot') return { ...snapshot, nodes: [{ ...snapshot.nodes[0], role: protectedField ? 'AXSecureTextField' : 'AXTextField', actions: supported ? ['setValue', 'AXConfirm'] : ['setValue'] }] };
+      sent.push(args?.action); return {};
+    });
+    await tool.call('observe', { app: 'Calculator' });
+    const call = () => tool.call('execute', { app: 'Calculator', snapshotId: 's1', ref: 's1:0', operation: 'confirm' });
+    if (supported && !protectedField) { await call(); assert.deepEqual(sent, [{ kind: 'confirm', ref: 's1:0' }]); }
+    else { await assert.rejects(call()); assert.equal(sent.length, 0); }
+  }
+});
+
+
+test('exact semantic selection requires its advertised capability', async () => {
+  let sent: unknown;
+  const tool = new DesktopTool(async (method,args) => {
+    if(method === 'apps') return [{pid:42,name:'Calculator'}];
+    if(method === 'snapshot') return {...snapshot,nodes:[{...snapshot.nodes[0],role:'AXRow',actions:['select']}]};
+    sent=args?.action;return {};
+  });
+  await tool.call('observe',{app:'Calculator'});
+  await tool.call('execute',{app:'Calculator',snapshotId:'s1',ref:'s1:0',operation:'select'});
+  assert.deepEqual(sent,{kind:'select',ref:'s1:0'});
+});
+
+test('exact context menu requires its advertised native action', async () => {
+  for (const supported of [true, false]) {
+    let sent: unknown;
+    const tool = new DesktopTool(async (method,args) => {
+      if(method === 'apps') return [{pid:42,name:'Calculator'}];
+      if(method === 'snapshot') return {...snapshot,nodes:[{...snapshot.nodes[0],role:'AXOutline',actions:supported?['AXShowMenu']:[]}]};
+      sent=args?.action;return {};
+    });
+    await tool.call('observe',{app:'Calculator'});
+    const call=()=>tool.call('execute',{app:'Calculator',snapshotId:'s1',ref:'s1:0',operation:'showMenu'});
+    if(supported){await call();assert.deepEqual(sent,{kind:'showMenu',ref:'s1:0'});}
+    else{await assert.rejects(call());assert.equal(sent,undefined);}
+  }
+});
+
+test('off-screen nonsemantic click forwards accepted native delivery exactly once and returns fresh state', async () => {
+  const sent: unknown[] = [];
+  let reads = 0;
+  const tool = new DesktopTool(async (method, args) => {
+    if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+    if (method === 'snapshot') {
+      const id = `offscreen-${++reads}`;
+      return { ...snapshot, id, windowId: 73, windowOnScreen: false,
+        nodes: [{ ...snapshot.nodes[0], ref: `${id}:0`, actions: ['backgroundClick'], frame: { x: 10, y: 20, width: 30, height: 40 } }] };
+    }
+    assert.equal(method,'execute');
+    sent.push(args);
+    return { delivery: 'dispatchedUnverified' };
+  }, async () => { throw new Error('No model selection expected'); }, undefined, 'background');
+  await tool.call('observe', { app: 'Calculator', windowId: 73 });
+  const result = await tool.call('click', { app: 'Calculator', snapshotId: 'offscreen-1', ref: 'offscreen-1:0' }) as any;
+  assert.equal(sent.length,1);
+  assert.deepEqual((sent[0] as any).action,{kind:'backgroundClick',ref:'offscreen-1:0'});
+  assert.equal((sent[0] as any).snapshotId,'offscreen-1');
+  assert.equal(result.status,'dispatchedUnverified');
+  assert.equal(result.snapshot.id,'offscreen-2');
+  assert.equal(result.snapshot.windowId,73);
+  assert.equal(result.snapshot.windowOnScreen,false);
+  await assert.rejects(tool.call('click', {app:'Calculator',snapshotId:'offscreen-1',ref:'offscreen-1:0'}),/Stale snapshot/);
+  assert.equal(sent.length,1);
+});
+
+test('off-screen double click forwards accepted exact native gesture once and returns fresh state', async () => {
+  const sent: unknown[] = [];
+  let reads = 0;
+  const tool = new DesktopTool(async (method, args) => {
+    if (method === 'apps') return [{ pid: 42, name: 'Calculator' }];
+    if (method === 'snapshot') {
+      const id = `gesture-${++reads}`;
+      return { ...snapshot, id, windowId: 74, windowOnScreen: false,
+        nodes: [{ ...snapshot.nodes[0], ref: `${id}:0`, frame: {x:10,y:20,width:30,height:40} }] };
+    }
+    assert.equal(method,'execute'); sent.push(args);
+    return {delivery:'dispatchedUnverified'};
+  }, async () => { throw new Error('No model selection expected'); }, undefined, 'background');
+  await tool.call('observe',{app:'Calculator',windowId:74});
+  const result = await tool.call('pointer',{app:'Calculator',snapshotId:'gesture-1',ref:'gesture-1:0',gesture:'doubleClick'}) as any;
+  assert.equal(sent.length,1);
+  assert.deepEqual(sent[0],{snapshotId:'gesture-1',action:{kind:'doubleClick',ref:'gesture-1:0'}});
+  assert.equal(result.status,'dispatchedUnverified');
+  assert.equal(result.snapshot.id,'gesture-2');
+  assert.equal(result.snapshot.windowId,74);
+  assert.equal(result.snapshot.windowOnScreen,false);
 });

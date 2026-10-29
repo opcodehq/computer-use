@@ -2,7 +2,7 @@ import { Schema } from 'effect';
 
 export const NodeSchema = Schema.Struct({
   visualSource: Schema.optional(Schema.Literals(['yolo','ocr'])), detectionConfidence: Schema.optional(Schema.Number),
-  focused: Schema.optional(Schema.Boolean),
+  selected: Schema.optional(Schema.Boolean), focused: Schema.optional(Schema.Boolean), focusSource: Schema.optional(Schema.Literals(['AXFocusedUIElement'])),
   visible: Schema.optional(Schema.Boolean),
   frame: Schema.optional(Schema.Struct({ x: Schema.Number, y: Schema.Number, width: Schema.Number, height: Schema.Number })),
   ref: Schema.String, role: Schema.String, name: Schema.String,
@@ -10,6 +10,8 @@ export const NodeSchema = Schema.Struct({
   actions: Schema.Array(Schema.String), depth: Schema.Number,
 });
 export const SnapshotSchema = Schema.Struct({
+  controlSurface: Schema.optional(Schema.Boolean), focusedElementAvailable: Schema.optional(Schema.Boolean),
+  focusedSurface: Schema.optional(Schema.Struct({windowId: Schema.Number, pid: Schema.Number, role: Schema.String, name: Schema.String})),
   accessibilityBackend: Schema.optional(Schema.Literals(['ax','atspi'])),
   visual: Schema.optional(Schema.Struct({ model: Schema.String, durationMs: Schema.Number, regionCount: Schema.Number, warning: Schema.optional(Schema.String) })),
   windowOnScreen: Schema.optional(Schema.Boolean), observationErrors: Schema.optional(Schema.Number), windowId: Schema.optional(Schema.Number), windowListed: Schema.optional(Schema.Boolean), capturedAt: Schema.optional(Schema.String),
@@ -19,7 +21,7 @@ export const SnapshotSchema = Schema.Struct({
 });
 export type Snapshot = typeof SnapshotSchema.Type;
 export const ActionSchema = Schema.Struct({
-  kind: Schema.Literals(['doubleClick', 'rightClick', 'hover', 'drag', 'visualClick', 'press', 'focus', 'setValue', 'insertText', 'key', 'click', 'clickElement', 'backgroundClick', 'backgroundKey', 'backgroundText', 'navigate']),
+  kind: Schema.Literals(['doubleClick', 'rightClick', 'hover', 'drag', 'visualClick', 'press', 'confirm', 'select', 'showMenu', 'focus', 'setValue', 'insertText', 'key', 'click', 'clickElement', 'backgroundClick', 'backgroundKey', 'backgroundText', 'navigate']),
   targetRef: Schema.optional(Schema.String), ref: Schema.optional(Schema.String), text: Schema.optional(Schema.String),
   x: Schema.optional(Schema.Number), y: Schema.optional(Schema.Number),
 });

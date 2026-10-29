@@ -1,0 +1,285 @@
+{
+  "kind": "Synthetic realistic customer/project operations workflows; no production service",
+  "trials": {
+    "1": {
+      "tasks": {
+        "project": {
+          "instructions": "Create project Harbor onboarding for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Maya Chen; priority: High; due: 2026-12-15; budget USD 18000. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "name": "Harbor onboarding",
+            "customer": "Harbor Foods",
+            "description": "Coordinate warehouse onboarding",
+            "owner": "Maya Chen",
+            "priority": "High",
+            "due": "2026-12-15",
+            "budget": "18000",
+            "check1": "Confirm warehouse access",
+            "check2": "Schedule team training"
+          },
+          "interactionEstimate": "14\u201318 meaningful interactions",
+          "goalInstructions": "Create project Harbor onboarding for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Maya Chen; priority: High; due: 2026-12-15; budget USD 18000. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access."
+        },
+        "triage": {
+          "instructions": "Use search and details for each request: OPS-104: owner Maya Chen, status In progress, priority High; OPS-109: owner Luis Ortiz, status Blocked, priority Urgent; OPS-112: owner Priya Shah, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "OPS-104": {
+              "owner": "Maya Chen",
+              "status": "In progress",
+              "priority": "High"
+            },
+            "OPS-109": {
+              "owner": "Luis Ortiz",
+              "status": "Blocked",
+              "priority": "Urgent"
+            },
+            "OPS-112": {
+              "owner": "Priya Shah",
+              "status": "Resolved",
+              "priority": "Normal"
+            }
+          },
+          "interactionEstimate": "18\u201320 meaningful interactions",
+          "goalInstructions": "Use search and details for each request: OPS-104: owner Maya Chen, status In progress, priority High; OPS-109: owner Luis Ortiz, status Blocked, priority Urgent; OPS-112: owner Priya Shah, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access."
+        },
+        "report": {
+          "instructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "title": "North renewal review",
+            "region": "North",
+            "status": "Pending",
+            "count": "6",
+            "total": "31750",
+            "references": "REN-201, REN-203, REN-205, REN-207, REN-209, REN-211"
+          },
+          "interactionEstimate": "10\u201314 meaningful interactions",
+          "goalInstructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access."
+        }
+      }
+    },
+    "2": {
+      "tasks": {
+        "project": {
+          "instructions": "Create project Harbor onboarding 2 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Luis Ortiz; priority: High; due: 2026-12-16; budget USD 18500. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "name": "Harbor onboarding 2",
+            "customer": "Harbor Foods",
+            "description": "Coordinate warehouse onboarding",
+            "owner": "Luis Ortiz",
+            "priority": "High",
+            "due": "2026-12-16",
+            "budget": "18500",
+            "check1": "Confirm warehouse access",
+            "check2": "Schedule team training"
+          },
+          "interactionEstimate": "14\u201318 meaningful interactions",
+          "goalInstructions": "Create project Harbor onboarding 2 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Luis Ortiz; priority: High; due: 2026-12-16; budget USD 18500. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access."
+        },
+        "triage": {
+          "instructions": "Use search and details for each request: OPS-105: owner Luis Ortiz, status In progress, priority High; OPS-110: owner Priya Shah, status Blocked, priority Urgent; OPS-101: owner Maya Chen, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "OPS-105": {
+              "owner": "Luis Ortiz",
+              "status": "In progress",
+              "priority": "High"
+            },
+            "OPS-110": {
+              "owner": "Priya Shah",
+              "status": "Blocked",
+              "priority": "Urgent"
+            },
+            "OPS-101": {
+              "owner": "Maya Chen",
+              "status": "Resolved",
+              "priority": "Normal"
+            }
+          },
+          "interactionEstimate": "18\u201320 meaningful interactions",
+          "goalInstructions": "Use search and details for each request: OPS-105: owner Luis Ortiz, status In progress, priority High; OPS-110: owner Priya Shah, status Blocked, priority Urgent; OPS-101: owner Maya Chen, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access."
+        },
+        "report": {
+          "instructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 2, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "title": "North renewal review 2",
+            "region": "North",
+            "status": "Pending",
+            "count": "6",
+            "total": "32950",
+            "references": "REN-201, REN-203, REN-205, REN-207, REN-209, REN-211"
+          },
+          "interactionEstimate": "10\u201314 meaningful interactions",
+          "goalInstructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 2, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access."
+        }
+      }
+    },
+    "3": {
+      "tasks": {
+        "project": {
+          "instructions": "Create project Harbor onboarding 3 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Priya Shah; priority: High; due: 2026-12-17; budget USD 18750. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "name": "Harbor onboarding 3",
+            "customer": "Harbor Foods",
+            "description": "Coordinate warehouse onboarding",
+            "owner": "Priya Shah",
+            "priority": "High",
+            "due": "2026-12-17",
+            "budget": "18750",
+            "check1": "Confirm warehouse access",
+            "check2": "Schedule team training"
+          },
+          "interactionEstimate": "14\u201318 meaningful interactions",
+          "goalInstructions": "Create project Harbor onboarding 3 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Priya Shah; priority: High; due: 2026-12-17; budget USD 18750. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access."
+        },
+        "triage": {
+          "instructions": "Use search and details for each request: OPS-106: owner Priya Shah, status In progress, priority High; OPS-111: owner Maya Chen, status Blocked, priority Urgent; OPS-102: owner Luis Ortiz, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "OPS-106": {
+              "owner": "Priya Shah",
+              "status": "In progress",
+              "priority": "High"
+            },
+            "OPS-111": {
+              "owner": "Maya Chen",
+              "status": "Blocked",
+              "priority": "Urgent"
+            },
+            "OPS-102": {
+              "owner": "Luis Ortiz",
+              "status": "Resolved",
+              "priority": "Normal"
+            }
+          },
+          "interactionEstimate": "18\u201320 meaningful interactions",
+          "goalInstructions": "Use search and details for each request: OPS-106: owner Priya Shah, status In progress, priority High; OPS-111: owner Maya Chen, status Blocked, priority Urgent; OPS-102: owner Luis Ortiz, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access."
+        },
+        "report": {
+          "instructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 3, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "title": "North renewal review 3",
+            "region": "North",
+            "status": "Pending",
+            "count": "6",
+            "total": "33550",
+            "references": "REN-201, REN-203, REN-205, REN-207, REN-209, REN-211"
+          },
+          "interactionEstimate": "10\u201314 meaningful interactions",
+          "goalInstructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 3, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access."
+        }
+      }
+    },
+    "4": {
+      "tasks": {
+        "project": {
+          "instructions": "Create project Harbor onboarding 4 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Maya Chen; priority: High; due: 2026-12-18; budget USD 19000. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "name": "Harbor onboarding 4",
+            "customer": "Harbor Foods",
+            "description": "Coordinate warehouse onboarding",
+            "owner": "Maya Chen",
+            "priority": "High",
+            "due": "2026-12-18",
+            "budget": "19000",
+            "check1": "Confirm warehouse access",
+            "check2": "Schedule team training"
+          },
+          "interactionEstimate": "14\u201318 meaningful interactions",
+          "goalInstructions": "Create project Harbor onboarding 4 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Maya Chen; priority: High; due: 2026-12-18; budget USD 19000. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access."
+        },
+        "triage": {
+          "instructions": "Use search and details for each request: OPS-107: owner Maya Chen, status In progress, priority High; OPS-112: owner Luis Ortiz, status Blocked, priority Urgent; OPS-103: owner Priya Shah, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "OPS-107": {
+              "owner": "Maya Chen",
+              "status": "In progress",
+              "priority": "High"
+            },
+            "OPS-112": {
+              "owner": "Luis Ortiz",
+              "status": "Blocked",
+              "priority": "Urgent"
+            },
+            "OPS-103": {
+              "owner": "Priya Shah",
+              "status": "Resolved",
+              "priority": "Normal"
+            }
+          },
+          "interactionEstimate": "18\u201320 meaningful interactions",
+          "goalInstructions": "Use search and details for each request: OPS-107: owner Maya Chen, status In progress, priority High; OPS-112: owner Luis Ortiz, status Blocked, priority Urgent; OPS-103: owner Priya Shah, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access."
+        },
+        "report": {
+          "instructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 4, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "title": "North renewal review 4",
+            "region": "North",
+            "status": "Pending",
+            "count": "6",
+            "total": "34150",
+            "references": "REN-201, REN-203, REN-205, REN-207, REN-209, REN-211"
+          },
+          "interactionEstimate": "10\u201314 meaningful interactions",
+          "goalInstructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 4, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access."
+        }
+      }
+    },
+    "5": {
+      "tasks": {
+        "project": {
+          "instructions": "Create project Harbor onboarding 5 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Luis Ortiz; priority: High; due: 2026-12-19; budget USD 19250. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "name": "Harbor onboarding 5",
+            "customer": "Harbor Foods",
+            "description": "Coordinate warehouse onboarding",
+            "owner": "Luis Ortiz",
+            "priority": "High",
+            "due": "2026-12-19",
+            "budget": "19250",
+            "check1": "Confirm warehouse access",
+            "check2": "Schedule team training"
+          },
+          "interactionEstimate": "14\u201318 meaningful interactions",
+          "goalInstructions": "Create project Harbor onboarding 5 for Harbor Foods. Description (exact text): \"Coordinate warehouse onboarding\"; exclude quotation marks and add no punctuation. Owner: Luis Ortiz; priority: High; due: 2026-12-19; budget USD 19250. Checklist: Confirm warehouse access; Schedule team training. Review, save exactly once, return to Projects, and reopen to verify. UI actions only; no API calls or fixture/grade access."
+        },
+        "triage": {
+          "instructions": "Use search and details for each request: OPS-108: owner Luis Ortiz, status In progress, priority High; OPS-101: owner Priya Shah, status Blocked, priority Urgent; OPS-104: owner Maya Chen, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "OPS-108": {
+              "owner": "Luis Ortiz",
+              "status": "In progress",
+              "priority": "High"
+            },
+            "OPS-101": {
+              "owner": "Priya Shah",
+              "status": "Blocked",
+              "priority": "Urgent"
+            },
+            "OPS-104": {
+              "owner": "Maya Chen",
+              "status": "Resolved",
+              "priority": "Normal"
+            }
+          },
+          "interactionEstimate": "18\u201320 meaningful interactions",
+          "goalInstructions": "Use search and details for each request: OPS-108: owner Luis Ortiz, status In progress, priority High; OPS-101: owner Priya Shah, status Blocked, priority Urgent; OPS-104: owner Maya Chen, status Resolved, priority Normal. Save each exactly once and verify persisted values on the resulting details page; the automatic post-save details page is sufficient readback. Leave all other requests unchanged. UI actions only; no API calls or fixture/grade access."
+        },
+        "report": {
+          "instructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 5, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access.",
+          "expectedState": {
+            "title": "North renewal review 5",
+            "region": "North",
+            "status": "Pending",
+            "count": "6",
+            "total": "34750",
+            "references": "REN-201, REN-203, REN-205, REN-207, REN-209, REN-211"
+          },
+          "interactionEstimate": "10\u201314 meaningful interactions",
+          "goalInstructions": "Open Renewals, filter North and Pending, and read all matching rows across both pages. Compute their count and total USD. Create report titled North renewal review 5, with North, Pending, computed count and total, and all references in ascending order separated by comma and space. Save once and reopen from Saved reports to verify. UI actions only; no API calls or fixture/grade access."
+        }
+      }
+    }
+  },
+  "agentRules": [
+    "Interact exclusively through visible UI using the assigned route.",
+    "Do not call APIs, reset or grading endpoints, or read fixture files, state or manifest expectedState while executing. Supply task instructions and start URL only.",
+    "Use a distinct arm/task/trial path for every execution."
+  ]
+}
