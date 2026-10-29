@@ -39,4 +39,5 @@ jobs:
           bun test tests/mac-lock.test.ts
           node scripts/test-macos-desktop.mjs
           bun scripts/test-macos-desktop-live.ts
-      - run: bun test
+      # Browser and CLI integration tests include cold process startup on hosted runners.
+      - run: bun test --timeout 30000
